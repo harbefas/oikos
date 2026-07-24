@@ -20,9 +20,10 @@ movie and the same page becomes the remote. Behind it, a full media stack
    (games on the TV)       (movies · series · music)   (catalog · search · get)
 ```
 
-The hub is the surface; the homelab underneath does the work. You can run just the
-hub (games + playing local media) or the whole household (search-to-watch, subtitles,
-the lot).
+The hub is the surface; the homelab underneath does the work. It is not a standalone
+app — it launches emulators, `mpv` and the *arr* apps, so those have to be there. The
+setup below stands the whole thing up; the hub is one component of it, installed along
+the way.
 
 ## Repo layout
 
@@ -32,9 +33,10 @@ the lot).
 | [`homelab/`](homelab/) | The stack: Arch `bootstrap-arch.sh`, `docker-compose.yml`, and an agent prompt that wires it all |
 | [`emulators/`](emulators/) | Retro gaming: the virtual-gamepad autoconfig, RetroArch/PCSX2 setup, cover fetcher |
 
-## Two ways in
+## Get started
 
-**The whole household** (Arch) — deps, media stack, hub, all of it:
+On Arch, the bootstrap stands up the whole household — deps, media stack, emulators
+config, and the hub as a service:
 
 ```bash
 git clone https://github.com/harbefas/oikos.git ~/oikos
@@ -42,18 +44,16 @@ cd ~/oikos
 ./homelab/bootstrap-arch.sh          # read it first; installs packages + Docker
 ```
 
-Then finish the wiring by hand from the printed checklist, or let an agent do it —
-see [Homelab stack](#homelab-stack).
+Then finish the wiring (indexers, quality caps, Jellyfin libraries, Bazarr) from the
+printed checklist by hand, or let an agent do it — see [Homelab stack](#homelab-stack).
 
-**Just the hub** (any distro with a Sway session on the TV):
+On another distro, adapt [`homelab/docker-compose.yml`](homelab/docker-compose.yml)
+for the media stack, install the launchers and hub as the bootstrap does
+(`sudo install -m755 hub/scripts/* /usr/local/bin/`, run `hub/console-hub.py` as a
+service), and set up the emulators — see the sections below.
 
-```bash
-sudo install -m755 hub/scripts/* /usr/local/bin/
-python3 hub/console-hub.py
-```
-
-Open `http://<server-ip>:8100` on your phone (same LAN, or over Tailscale).
-Player 2: append `?p=2`.
+Once it is up, open `http://<server-ip>:8100` on your phone (same LAN, or over
+Tailscale). Player 2: append `?p=2`.
 
 ---
 
@@ -78,8 +78,10 @@ plus [`python-evdev`](https://pypi.org/project/evdev/). No app, no HTTPS require
 
 - Linux with a **Sway** session on the TV (autologin on a TTY works well)
 - Python 3 and `python-evdev`; `mpv` for video/music; emulators you want (`pcsx2`, `retroarch`)
-- Optional catalog/download stack on localhost: Jellyfin (`:8096`), Radarr (`:7878`),
-  Sonarr (`:8989`). Games-only mode needs none of it.
+- For movies/series: the catalog/download stack on localhost — Jellyfin (`:8096`),
+  Radarr (`:7878`), Sonarr (`:8989`). (The games tab doesn't use these, but it still
+  needs the emulators, launchers and gamepad autoconfig — see
+  [`emulators/`](emulators/).)
 - Runs as a user in the `input` group (to create `uinput` devices)
 
 ### Configuration
