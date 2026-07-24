@@ -1,0 +1,31 @@
+#!/bin/bash
+# Toca video na TV com hardware decode, audio corrigido e legenda PT-BR.
+#
+#   LIBVA_DRIVER_NAME=iHD -> sem isso o mpv nao acha o driver Intel e
+#                            decodifica 4K HEVC em software (CPU fritando)
+#   sub-auto=fuzzy        -> o padrao 'exact' ignora legenda cujo nome tenha
+#                            sufixo (ex: filme.pt-BR.srt), que e como o Bazarr grava
+#   pan                   -> downmix 5.1->estereo feito aqui, nao pela TV,
+#                            com peso maior no canal central (dialogos)
+#   dynaudnorm            -> achata a diferenca entre sussurro e explosao
+#
+# Uso: filme /caminho/do/video.mkv [opcoes extras do mpv]
+set -euo pipefail
+
+export WAYLAND_DISPLAY=wayland-1
+export XDG_RUNTIME_DIR=/run/user/1000
+export LIBVA_DRIVER_NAME=iHD
+
+exec mpv \
+  --fullscreen \
+  --hwdec=vaapi --vo=gpu \
+  --cursor-autohide=100 \
+  --sub-auto=fuzzy \
+  --slang=pt-BR,pob,pt,por \
+  --alang=por,pob,pt-BR,pt \
+  --audio-channels=stereo \
+  --af=lavfi=[pan=stereo\|FL=0.5*FC+0.4*FL+0.3*BL+0.2*LFE\|FR=0.5*FC+0.4*FR+0.3*BR+0.2*LFE,dynaudnorm=f=200:g=15:p=0.9] \
+  --volume-max=200 --volume=110 \
+  --save-position-on-quit \
+  --input-ipc-server=/tmp/mpv.sock \
+  "$@"

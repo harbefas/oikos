@@ -1,0 +1,7 @@
+#!/bin/bash
+# Toca uma pasta de album na TV: mpv com janela (mostra a capa embutida),
+# playlist da pasta inteira, controlavel pelo mesmo socket do filme.
+export WAYLAND_DISPLAY=wayland-1
+export XDG_RUNTIME_DIR=/run/user/1000
+export LIBVA_DRIVER_NAME=iHD
+exec mpv --force-window=yes --fullscreen --volume=110   --input-ipc-server=/tmp/mpv.sock   "$1" &> /tmp/mpv.log

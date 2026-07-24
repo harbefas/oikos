@@ -1,0 +1,5 @@
+#!/bin/bash
+# Lanca uma ROM de N64 no RetroArch dentro da sessao Sway.
+export WAYLAND_DISPLAY=wayland-1
+export XDG_RUNTIME_DIR=/run/user/1000
+exec retroarch -L /usr/lib/libretro/mupen64plus_next_libretro.so --fullscreen "$@" &> /tmp/retroarch.log

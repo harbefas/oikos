@@ -1,0 +1,4 @@
+#!/bin/bash
+pkill -x pcsx2-qt 2>/dev/null; pkill -x retroarch 2>/dev/null; pkill -x mpv 2>/dev/null
+sleep 2
+for p in pcsx2-qt retroarch mpv; do pgrep -x $p >/dev/null && pkill -9 -x $p; done

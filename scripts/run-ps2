@@ -1,0 +1,7 @@
+#!/bin/bash
+# Lanca o PCSX2 dentro da sessao Sway. Sem WAYLAND_DISPLAY exportado
+# o Qt nao acha o compositor e abre em display "null" (tela preta).
+export WAYLAND_DISPLAY=wayland-1
+export XDG_RUNTIME_DIR=/run/user/1000
+export QT_QPA_PLATFORM=wayland
+exec pcsx2-qt "$@" &> /tmp/pcsx2.log
