@@ -44,7 +44,7 @@ input_player2_joypad_index = "1" # second virtual pad -> player 2
 - **Core: parallel-rdp** (Vulkan). angrylion is pure software: it took the N64 from
   34% to 325% CPU here. Pick parallel-rdp in the core options.
 - N64 button map in the hub: **Z -> L2**, **C-buttons -> right analog stick**.
-- Launch via `run-n64` (in [`../scripts`](../scripts)), which exports
+- Launch via `run-n64` (in [`../hub/scripts`](../hub/scripts)), which exports
   `WAYLAND_DISPLAY` so RetroArch does not open on a "null" display under Sway.
 
 ## PS2 (PCSX2)

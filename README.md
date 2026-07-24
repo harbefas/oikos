@@ -1,13 +1,67 @@
-# Console Hub
+# Oikos
 
-Turn any old PC into a couch console you drive from your phone. One web page,
-no app to install: tap a game cover and it launches on the TV and your phone
-becomes the gamepad; tap a movie and the same page becomes a media remote.
+*oikos* (οἶκος) — the ancient Greek word for the household: the home as one running
+whole. This is that, in a rack of one old laptop: a self-hosted media and
+retro-gaming homelab you run on a screenless PC wired to the TV, and drive entirely
+from your phone.
 
-Built for a screenless laptop running a Sway session on the TV over HDMI, wired
-into an [arr](https://wiki.servarr.com/) media stack (Jellyfin + Radarr + Sonarr).
+No app to install. Open one web page — **Console Hub**, the control surface — and
+tap a game cover to launch it on the TV with your phone as the gamepad, or tap a
+movie and the same page becomes the remote. Behind it, a full media stack
+(Jellyfin + the *arr* apps) finds, downloads and organizes everything.
 
-## What it does
+```
+        phone browser  ──►  Console Hub  (:8100, one Python file)
+                                 │
+          ┌──────────────────────┼───────────────────────────┐
+          ▼                      ▼                            ▼
+   uinput gamepad          mpv on the TV               Jellyfin / Radarr /
+   → PCSX2 / RetroArch      (IPC socket)                Sonarr / Lidarr APIs
+   (games on the TV)       (movies · series · music)   (catalog · search · get)
+```
+
+The hub is the surface; the homelab underneath does the work. You can run just the
+hub (games + playing local media) or the whole household (search-to-watch, subtitles,
+the lot).
+
+## Repo layout
+
+| Path | What |
+|------|------|
+| [`hub/`](hub/) | **Console Hub** — the phone control surface (`console-hub.py`) + the launcher scripts it shells out to |
+| [`homelab/`](homelab/) | The stack: Arch `bootstrap-arch.sh`, `docker-compose.yml`, and an agent prompt that wires it all |
+| [`emulators/`](emulators/) | Retro gaming: the virtual-gamepad autoconfig, RetroArch/PCSX2 setup, cover fetcher |
+
+## Two ways in
+
+**The whole household** (Arch) — deps, media stack, hub, all of it:
+
+```bash
+git clone https://github.com/harbefas/oikos.git ~/oikos
+cd ~/oikos
+./homelab/bootstrap-arch.sh          # read it first; installs packages + Docker
+```
+
+Then finish the wiring by hand from the printed checklist, or let an agent do it —
+see [Homelab stack](#homelab-stack).
+
+**Just the hub** (any distro with a Sway session on the TV):
+
+```bash
+sudo install -m755 hub/scripts/* /usr/local/bin/
+python3 hub/console-hub.py
+```
+
+Open `http://<server-ip>:8100` on your phone (same LAN, or over Tailscale).
+Player 2: append `?p=2`.
+
+---
+
+## Console Hub
+
+The single web page you drive everything from. One Python file, standard library
+plus [`python-evdev`](https://pypi.org/project/evdev/). No app, no HTTPS required
+(it uses the Fullscreen API, which works over plain HTTP on Android).
 
 - **Games** — grid of box art for PS2 (PCSX2) and N64 (RetroArch). Tap to launch;
   the phone turns into a virtual gamepad. Two players via `?p=2` (two identical
@@ -17,24 +71,20 @@ into an [arr](https://wiki.servarr.com/) media stack (Jellyfin + Radarr + Sonarr
   Radarr/Sonarr and shows live download progress (a tiny Jellyseerr).
 - **Music** — albums from a folder, played as an mpv playlist.
 - **Media remote** — the same page becomes play/pause, seek, volume, audio/subtitle
-  cycling and prev/next, talking to mpv over its IPC socket. It switches between
-  gamepad and remote automatically based on what is running.
+  cycling and prev/next, over mpv's IPC socket. It switches between gamepad and
+  remote automatically based on what is running.
 
-No app, no HTTPS required (uses the Fullscreen API, which works over plain HTTP on
-Android). Single Python file, standard library plus `python-evdev`.
-
-## Requirements
+### Requirements
 
 - Linux with a **Sway** session on the TV (autologin on a TTY works well)
-- Python 3 and [`python-evdev`](https://pypi.org/project/evdev/)
-- `mpv` for video/music, and emulators you want: `pcsx2-qt`, `retroarch`
-- Optional catalog/download stack, each on localhost: Jellyfin (`:8096`),
-  Radarr (`:7878`), Sonarr (`:8989`). The games-only mode needs none of them.
+- Python 3 and `python-evdev`; `mpv` for video/music; emulators you want (`pcsx2`, `retroarch`)
+- Optional catalog/download stack on localhost: Jellyfin (`:8096`), Radarr (`:7878`),
+  Sonarr (`:8989`). Games-only mode needs none of it.
 - Runs as a user in the `input` group (to create `uinput` devices)
 
-## Layout it expects
+### Configuration
 
-Everything is a constant at the top of `console-hub.py` — edit to taste:
+Everything is a constant at the top of `hub/console-hub.py` — edit to taste:
 
 | What | Default | Constant |
 |------|---------|----------|
@@ -48,25 +98,15 @@ Everything is a constant at the top of `console-hub.py` — edit to taste:
 
 API keys are **read from disk at runtime**, never hardcoded: Jellyfin from
 `/srv/jellyfin/console-hub.key`, Radarr/Sonarr from each container's `config.xml`.
-Point these at your own paths in the code.
+Point these at your own paths.
 
-The scripts in [`scripts/`](scripts/) are the launchers the hub shells out to
-(`run-ps2`, `run-n64`, `filme`, `musica`, `stop-game`). Install them on `PATH`.
+The launchers in [`hub/scripts/`](hub/scripts/) (`run-ps2`, `run-n64`, `filme`,
+`musica`, `stop-game`) are what the hub shells out to. Install them on `PATH`.
 They assume `XDG_RUNTIME_DIR=/run/user/1000` (uid 1000) and `WAYLAND_DISPLAY=wayland-1` —
 adjust for your user. `filme` carries the hardware-decode and audio tuning
 (`LIBVA_DRIVER_NAME=iHD` for Intel iGPUs; change for AMD/NVIDIA).
 
-## Run
-
-```bash
-sudo install -m755 scripts/* /usr/local/bin/
-python3 console-hub.py
-```
-
-Then open `http://<server-ip>:8100` on your phone (same LAN, or over Tailscale).
-Player 2: `http://<server-ip>:8100/?p=2`.
-
-### As a service
+### Run as a service
 
 ```ini
 # /etc/systemd/system/console-hub.service
@@ -87,28 +127,24 @@ WantedBy=multi-user.target
 sudo systemctl enable --now console-hub
 ```
 
-## Whole-homelab bootstrap (Arch)
+---
 
-To stand up the full stack, not just the hub, [`homelab/`](homelab/) has an
-Arch bootstrap:
+## Homelab stack
 
-```bash
-./homelab/bootstrap-arch.sh
-```
-
-It installs deps, creates `/media` with the permissions hardlinks need, brings up
-the media stack ([`homelab/docker-compose.yml`](homelab/docker-compose.yml):
+[`homelab/bootstrap-arch.sh`](homelab/bootstrap-arch.sh) stands up everything under
+the hub. It installs deps, creates `/media` with the permissions hardlinks need,
+brings up the media stack ([`homelab/docker-compose.yml`](homelab/docker-compose.yml):
 Jellyfin, Radarr, Sonarr, Lidarr, Prowlarr, Bazarr, Jellyseerr, FlareSolverr,
 Navidrome), installs the hub + launchers as a service, and prints a checklist for
 the parts that can't be scripted (Tailscale login, indexers, quality profiles,
 Jellyfin libraries, Bazarr languages). It is idempotent; review it before running.
 
-The manual checklist is also written as an agent prompt:
+That checklist is also written as an **agent prompt**:
 [`homelab/agent-config-prompt.md`](homelab/agent-config-prompt.md). Paste it to a
 coding agent with shell access on a fresh Arch box and it does the whole thing end
-to end: clones the repo, runs the bootstrap, then wires the arr stack, quality caps,
-Jellyfin and Bazarr through their APIs (asking you for indexer credentials and the
-Tailscale login).
+to end — clones the repo, runs the bootstrap, then wires the arr stack, quality
+caps, Jellyfin and Bazarr through their APIs (asking you for indexer credentials
+and the Tailscale login).
 
 <details>
 <summary><b>The full agent prompt</b> (click to expand — copy from here)</summary>
@@ -122,8 +158,8 @@ Clone the repo and run the bootstrap as the normal user (it uses sudo internally
 do not run it as root):
 
 ```bash
-git clone https://github.com/harbefas/console-hub.git ~/console-hub
-cd ~/console-hub
+git clone https://github.com/harbefas/oikos.git ~/oikos
+cd ~/oikos
 less homelab/bootstrap-arch.sh   # read it first; it installs packages and Docker
 ./homelab/bootstrap-arch.sh
 ```
@@ -132,7 +168,7 @@ Read the script before running it. When it finishes, confirm the containers are 
 before continuing:
 
 ```bash
-docker compose -f ~/console-hub/homelab/docker-compose.yml ps
+docker compose -f ~/oikos/homelab/docker-compose.yml ps
 ```
 
 Every container below should be running: Jellyfin (`:8096`), Radarr (`:7878`),
@@ -230,18 +266,20 @@ not complete, with the exact error.
 
 </details>
 
+---
+
 ## Emulators
 
 Game launching (N64 via RetroArch, PS2 via PCSX2) and the two-player virtual
-gamepad have their own setup — including the RetroArch autoconfig the phone pad
-needs, the parallel-rdp core, PS2 BIOS/memory card, and cover fetching. See
+gamepad have their own setup — the RetroArch autoconfig the phone pad needs, the
+parallel-rdp core, PS2 BIOS/memory card, and cover fetching. See
 [`emulators/README.md`](emulators/README.md). Bring your own ROMs and PS2 BIOS.
 
 ## Notes
 
-- Covers for games come from [libretro-thumbnails](https://github.com/libretro-thumbnails)
-  via [`emulators/fetch-covers.py`](emulators/fetch-covers.py);
-  drop `<rom-name>.png` into the covers folder if a title does not match.
+- Game covers come from [libretro-thumbnails](https://github.com/libretro-thumbnails)
+  via [`emulators/fetch-covers.py`](emulators/fetch-covers.py); drop a `<rom-name>.png`
+  into the covers folder if a title does not match.
 - Music has no search on purpose — public indexers rarely carry music and Lidarr's
   metadata is poor. Fill `/media/musica` yourself.
 - Legality is on you: use your own game dumps and legally obtained media.

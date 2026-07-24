@@ -19,8 +19,8 @@ Clone the repo and run the bootstrap as the normal user (it uses sudo internally
 do not run it as root):
 
 ```bash
-git clone https://github.com/harbefas/console-hub.git ~/console-hub
-cd ~/console-hub
+git clone https://github.com/harbefas/oikos.git ~/oikos
+cd ~/oikos
 less homelab/bootstrap-arch.sh   # read it first; it installs packages and Docker
 ./homelab/bootstrap-arch.sh
 ```
@@ -29,7 +29,7 @@ Read the script before running it. When it finishes, confirm the containers are 
 before continuing:
 
 ```bash
-docker compose -f ~/console-hub/homelab/docker-compose.yml ps
+docker compose -f ~/oikos/homelab/docker-compose.yml ps
 ```
 
 Every container below should be running: Jellyfin (`:8096`), Radarr (`:7878`),

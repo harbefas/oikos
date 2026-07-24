@@ -42,6 +42,7 @@ sudo pacman -S --needed --noconfirm libretro-mupen64plus-next 2>/dev/null || \
 # virtual-gamepad autoconfig for RetroArch (without it the phone pad does NOTHING)
 install -Dm644 "$REPO_DIR/emulators/HomelabVirtualGamepad.cfg" \
   "$HOME/.config/retroarch/autoconfig/udev/HomelabVirtualGamepad.cfg"
+# (repo layout: the hub itself lives in hub/, the media stack here in homelab/)
 
 # --- 2. docker -------------------------------------------------------------
 say "Enabling Docker"
@@ -72,8 +73,8 @@ warn "Set Transmission download dir to $MEDIA/downloads and categories filmes/se
 
 # --- 6. Console Hub + launchers -------------------------------------------
 say "Installing Console Hub + launchers"
-sudo install -m755 "$REPO_DIR"/scripts/* /usr/local/bin/
-sudo install -Dm755 "$REPO_DIR/console-hub.py" /opt/console-hub/console-hub.py
+sudo install -m755 "$REPO_DIR"/hub/scripts/* /usr/local/bin/
+sudo install -Dm755 "$REPO_DIR/hub/console-hub.py" /opt/console-hub/console-hub.py
 sudo tee /etc/systemd/system/console-hub.service >/dev/null <<EOF
 [Unit]
 Description=Console Hub
