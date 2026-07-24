@@ -1,21 +1,44 @@
 # Agent prompt: configure the homelab after bootstrap
 
-Paste this to a coding agent (Claude Code, etc.) that has **shell access on the
-homelab machine** and permission to run `docker`, `curl`, and edit files. It does
-the wiring that `bootstrap-arch.sh` deliberately leaves manual: linking the arr
-stack, setting quality caps, Jellyfin libraries, and Bazarr.
+Paste this to a coding agent (Claude Code, etc.) that has **shell access on a fresh
+Arch homelab machine** and permission to run `docker`, `curl`, `pacman` (via sudo),
+and edit files. It sets up the whole thing end to end: runs the bootstrap to
+install deps and bring the stack up, then does the wiring the bootstrap leaves
+manual (linking the arr stack, quality caps, Jellyfin libraries, Bazarr).
 
 Copy everything below the line.
 
 ---
 
-You are configuring a self-hosted media homelab. `bootstrap-arch.sh` already ran:
-Docker is up and these containers are running on the host — Jellyfin (`:8096`),
-Radarr (`:7878`), Sonarr (`:8989`), Lidarr (`:8686`), Prowlarr (`:9696`),
-Bazarr (`:6767`), Jellyseerr (`:5055`), FlareSolverr (`:8191`), Navidrome (`:4533`).
-Transmission runs on the host at `:9091`. Media lives under `/media`
+You are setting up a self-hosted media homelab on a fresh Arch Linux machine, end
+to end. Work in order, verifying as you go.
+
+## Step 0 - install and run the bootstrap
+
+Clone the repo and run the bootstrap as the normal user (it uses sudo internally;
+do not run it as root):
+
+```bash
+git clone https://github.com/harbefas/console-hub.git ~/console-hub
+cd ~/console-hub
+less homelab/bootstrap-arch.sh   # read it first; it installs packages and Docker
+./homelab/bootstrap-arch.sh
+```
+
+Read the script before running it. When it finishes, confirm the containers are up
+before continuing:
+
+```bash
+docker compose -f ~/console-hub/homelab/docker-compose.yml ps
+```
+
+Every container below should be running: Jellyfin (`:8096`), Radarr (`:7878`),
+Sonarr (`:8989`), Lidarr (`:8686`), Prowlarr (`:9696`), Bazarr (`:6767`),
+Jellyseerr (`:5055`), FlareSolverr (`:8191`), Navidrome (`:4533`). Transmission
+runs on the host at `:9091`. Media lives under `/media`
 (`/media/{filmes,series,musica,downloads}`, downloads split into
-`filmes/series/musica` categories).
+`filmes/series/musica` categories). If a container is missing, fix that (check
+`docker logs <name>`) before moving on.
 
 ## Rules
 
