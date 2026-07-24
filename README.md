@@ -230,9 +230,17 @@ not complete, with the exact error.
 
 </details>
 
+## Emulators
+
+Game launching (N64 via RetroArch, PS2 via PCSX2) and the two-player virtual
+gamepad have their own setup — including the RetroArch autoconfig the phone pad
+needs, the parallel-rdp core, PS2 BIOS/memory card, and cover fetching. See
+[`emulators/README.md`](emulators/README.md). Bring your own ROMs and PS2 BIOS.
+
 ## Notes
 
-- Covers for games come from [libretro-thumbnails](https://github.com/libretro-thumbnails);
+- Covers for games come from [libretro-thumbnails](https://github.com/libretro-thumbnails)
+  via [`emulators/fetch-covers.py`](emulators/fetch-covers.py);
   drop `<rom-name>.png` into the covers folder if a title does not match.
 - Music has no search on purpose — public indexers rarely carry music and Lidarr's
   metadata is poor. Fill `/media/musica` yourself.

@@ -39,6 +39,10 @@ sudo pacman -Syu --needed --noconfirm \
 sudo pacman -S --needed --noconfirm libretro-mupen64plus-next 2>/dev/null || \
   warn "install an N64 core manually (e.g. libretro-mupen64plus-next from AUR)"
 
+# virtual-gamepad autoconfig for RetroArch (without it the phone pad does NOTHING)
+install -Dm644 "$REPO_DIR/emulators/HomelabVirtualGamepad.cfg" \
+  "$HOME/.config/retroarch/autoconfig/udev/HomelabVirtualGamepad.cfg"
+
 # --- 2. docker -------------------------------------------------------------
 say "Enabling Docker"
 sudo systemctl enable --now docker
@@ -105,6 +109,8 @@ cat <<EOF
      Jellyfin/Radarr/Sonarr API keys where it reads them, then:
        sudo systemctl start console-hub
      Open http://$IP:8100 on your phone.
-  8. Emulators from AUR as needed: pcsx2 (PS2). Games work without the arr stack.
+  8. Emulators: N64 (RetroArch) deps installed above. For PS2 install pcsx2-latest-bin
+     from the AUR and supply your own BIOS. Full config (parallel-rdp core, memory
+     card, quality flags) in emulators/README.md. Games work without the arr stack.
 
 EOF
