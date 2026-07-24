@@ -86,26 +86,29 @@ plus [`python-evdev`](https://pypi.org/project/evdev/). No app, no HTTPS require
 
 ### Configuration
 
-Everything is a constant at the top of `hub/console-hub.py` — edit to taste:
+Constants at the top of `hub/console-hub.py`. The paths also read from environment
+variables, so you can override them in the systemd unit without editing code:
 
-| What | Default | Constant |
-|------|---------|----------|
-| ROMs | `/media/roms/{ps2,n64}` | `ROMS` |
-| Game covers | `/media/roms/.covers/<system>/<rom>.png` | `COVERS` |
-| Music | `/media/musica/<album>/` | `MUSIC` |
-| mpv IPC socket | `/tmp/mpv.sock` | `MPV_SOCK` |
-| Port | `8100` | `PORT` |
-| Jellyfin | `http://localhost:8096` | `JF` |
-| Radarr / Sonarr | `http://localhost:{7878,8989}` | `RADARR` / `SONARR` |
+| What | Default | Constant | Env override |
+|------|---------|----------|--------------|
+| Media root | `/media` | `MEDIA` | `OIKOS_MEDIA` |
+| ROMs | `<media>/roms/{ps2,n64}` | `ROMS` | `OIKOS_ROMS` |
+| Game covers | `<roms>/.covers/<system>/<rom>.png` | `COVERS` | — |
+| Music | `<media>/music/<album>/` | `MUSIC` | `OIKOS_MUSIC` |
+| mpv IPC socket | `/tmp/mpv.sock` | `MPV_SOCK` | — |
+| Port | `8100` | `PORT` | — |
+| Jellyfin | `http://localhost:8096` | `JF` | — |
+| Radarr / Sonarr | `http://localhost:{7878,8989}` | `RADARR` / `SONARR` | — |
+| Auth token | *(none)* | `TOKEN` | `OIKOS_TOKEN` |
 
 API keys are **read from disk at runtime**, never hardcoded: Jellyfin from
 `/srv/jellyfin/console-hub.key`, Radarr/Sonarr from each container's `config.xml`.
 Point these at your own paths.
 
-The launchers in [`hub/scripts/`](hub/scripts/) (`run-ps2`, `run-n64`, `filme`,
-`musica`, `stop-game`) are what the hub shells out to. Install them on `PATH`.
+The launchers in [`hub/scripts/`](hub/scripts/) (`run-ps2`, `run-n64`, `play-video`,
+`play-audio`, `stop-game`) are what the hub shells out to. Install them on `PATH`.
 They assume `XDG_RUNTIME_DIR=/run/user/1000` (uid 1000) and `WAYLAND_DISPLAY=wayland-1` —
-adjust for your user. `filme` carries the hardware-decode and audio tuning
+adjust for your user. `play-video` carries the hardware-decode and audio tuning
 (`LIBVA_DRIVER_NAME=iHD` for Intel iGPUs; change for AMD/NVIDIA).
 
 ### Run as a service
@@ -177,8 +180,8 @@ Every container below should be running: Jellyfin (`:8096`), Radarr (`:7878`),
 Sonarr (`:8989`), Lidarr (`:8686`), Prowlarr (`:9696`), Bazarr (`:6767`),
 Jellyseerr (`:5055`), FlareSolverr (`:8191`), Navidrome (`:4533`). Transmission
 runs on the host at `:9091`. Media lives under `/media`
-(`/media/{filmes,series,musica,downloads}`, downloads split into
-`filmes/series/musica` categories). If a container is missing, fix that (check
+(`/media/{movies,series,music,downloads}`, downloads split into
+`movies/series/music` categories). If a container is missing, fix that (check
 `docker logs <name>`) before moving on.
 
 ### Rules
@@ -210,12 +213,12 @@ Radarr/Sonarr/Lidarr are API v3 (`/api/v3/...`); Prowlarr is v1 (`/api/v1/...`).
 
 ### Tasks, in order
 
-1. **Root folders.** In Radarr add `/media/filmes`, Sonarr `/media/series`,
-   Lidarr `/media/musica` (`POST /api/v3/rootfolder`). Verify with a `GET`.
+1. **Root folders.** In Radarr add `/media/movies`, Sonarr `/media/series`,
+   Lidarr `/media/music` (`POST /api/v3/rootfolder`). Verify with a `GET`.
 
 2. **Download client.** In Radarr, Sonarr, Lidarr add Transmission
    (`POST /api/v3/downloadclient`): host `172.17.0.1`, port `9091`, and the right
-   category (`filmes`/`series`/`musica`). GET the downloadclient `/schema` for
+   category (`movies`/`series`/`music`). GET the downloadclient `/schema` for
    the Transmission implementation to get field names right. Test with the
    client's `/test` action before saving.
 
@@ -241,7 +244,7 @@ Radarr/Sonarr/Lidarr are API v3 (`/api/v3/...`); Prowlarr is v1 (`/api/v1/...`).
    enable "remove completed downloads" (hardlinks between the split mounts are
    cross-device, so this avoids double disk use). Verify via the config GET.
 
-7. **Jellyfin libraries.** Add a Movies library pointing at `/media/filmes` and a
+7. **Jellyfin libraries.** Add a Movies library pointing at `/media/movies` and a
    Shows library at `/media/series`. Enable VAAPI hardware transcoding (the
    container already has `/dev/dri`). Do this via the Jellyfin API with an API key,
    or tell the human the two clicks if the API path is unclear. Verify a scan runs.
@@ -277,13 +280,29 @@ gamepad have their own setup — the RetroArch autoconfig the phone pad needs, t
 parallel-rdp core, PS2 BIOS/memory card, and cover fetching. See
 [`emulators/README.md`](emulators/README.md). Bring your own ROMs and PS2 BIOS.
 
+## Security
+
+Be honest with yourself about what this is: a web server that **launches and kills
+processes on the host** (emulators, mpv) on request. Treat it accordingly.
+
+- **Trust boundary is the network.** Run it on your LAN, and reach it from outside
+  over Tailscale (or another VPN). **Never** port-forward `:8100` to the internet or
+  put it behind a public reverse proxy. There is no sandbox around what it can start.
+- **Optional shared token.** Set `OIKOS_TOKEN` (env var) and every request must carry
+  it. First visit with `http://<host>:8100/?t=<token>` sets a cookie; after that the
+  phone just works. Unset (the default) means no auth — fine on a LAN you control,
+  handy when you share a Tailscale node with someone you don't want launching games.
+  It is a single shared secret over HTTP, not real user auth — a speed bump, not a wall.
+- **No TLS by itself.** Plain HTTP. If you want encryption end to end, front it with
+  `tailscale serve` (Tailscale-issued cert) rather than exposing it.
+
 ## Notes
 
 - Game covers come from [libretro-thumbnails](https://github.com/libretro-thumbnails)
   via [`emulators/fetch-covers.py`](emulators/fetch-covers.py); drop a `<rom-name>.png`
   into the covers folder if a title does not match.
 - Music has no search on purpose — public indexers rarely carry music and Lidarr's
-  metadata is poor. Fill `/media/musica` yourself.
+  metadata is poor. Fill `/media/music` yourself.
 - Legality is on you: use your own game dumps and legally obtained media.
 
 ## License

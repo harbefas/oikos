@@ -36,8 +36,8 @@ Every container below should be running: Jellyfin (`:8096`), Radarr (`:7878`),
 Sonarr (`:8989`), Lidarr (`:8686`), Prowlarr (`:9696`), Bazarr (`:6767`),
 Jellyseerr (`:5055`), FlareSolverr (`:8191`), Navidrome (`:4533`). Transmission
 runs on the host at `:9091`. Media lives under `/media`
-(`/media/{filmes,series,musica,downloads}`, downloads split into
-`filmes/series/musica` categories). If a container is missing, fix that (check
+(`/media/{movies,series,music,downloads}`, downloads split into
+`movies/series/music` categories). If a container is missing, fix that (check
 `docker logs <name>`) before moving on.
 
 ## Rules
@@ -69,12 +69,12 @@ Radarr/Sonarr/Lidarr are API v3 (`/api/v3/...`); Prowlarr is v1 (`/api/v1/...`).
 
 ## Tasks, in order
 
-1. **Root folders.** In Radarr add `/media/filmes`, Sonarr `/media/series`,
-   Lidarr `/media/musica` (`POST /api/v3/rootfolder`). Verify with a `GET`.
+1. **Root folders.** In Radarr add `/media/movies`, Sonarr `/media/series`,
+   Lidarr `/media/music` (`POST /api/v3/rootfolder`). Verify with a `GET`.
 
 2. **Download client.** In Radarr, Sonarr, Lidarr add Transmission
    (`POST /api/v3/downloadclient`): host `172.17.0.1`, port `9091`, and the right
-   category (`filmes`/`series`/`musica`). GET the downloadclient `/schema` for
+   category (`movies`/`series`/`music`). GET the downloadclient `/schema` for
    the Transmission implementation to get field names right. Test with the
    client's `/test` action before saving.
 
@@ -100,7 +100,7 @@ Radarr/Sonarr/Lidarr are API v3 (`/api/v3/...`); Prowlarr is v1 (`/api/v1/...`).
    enable "remove completed downloads" (hardlinks between the split mounts are
    cross-device, so this avoids double disk use). Verify via the config GET.
 
-7. **Jellyfin libraries.** Add a Movies library pointing at `/media/filmes` and a
+7. **Jellyfin libraries.** Add a Movies library pointing at `/media/movies` and a
    Shows library at `/media/series`. Enable VAAPI hardware transcoding (the
    container already has `/dev/dri`). Do this via the Jellyfin API with an API key,
    or tell the human the two clicks if the API path is unclear. Verify a scan runs.

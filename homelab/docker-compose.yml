@@ -89,4 +89,4 @@ services:
     ports: ["4533:4533"]
     volumes:
       - ./config/navidrome:/data
-      - /media/musica:/music:ro   # Lidarr writes, Navidrome only reads
+      - /media/music:/music:ro   # Lidarr writes, Navidrome only reads

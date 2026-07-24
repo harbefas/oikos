@@ -12,6 +12,10 @@ import json, os, socket, struct, subprocess, urllib.parse, urllib.request, zlib
 from urllib.parse import urlparse, parse_qs
 
 MPV_SOCK = "/tmp/mpv.sock"
+# Paths and the optional auth token are env-configurable so you don't have to edit
+# code. Defaults are English; override any of them in the systemd unit or shell.
+MEDIA = os.environ.get("OIKOS_MEDIA", "/media")
+TOKEN = os.environ.get("OIKOS_TOKEN", "")   # shared secret; empty = no auth (LAN only)
 STATE = {"cover": None, "mkind": None}   # do que esta tocando (setado no /api/play)
 
 
@@ -57,7 +61,7 @@ MPV_ACTIONS = {
     "next":      ["playlist-next"],
     "prev":      ["playlist-prev"],
 }
-MUSIC = "/media/musica"
+MUSIC = os.environ.get("OIKOS_MUSIC", f"{MEDIA}/music")
 
 
 def list_albums():
@@ -123,8 +127,8 @@ MANIFEST = json.dumps({
 
 PORT = 8100
 AMAX = 32767
-ROMS = "/media/roms"
-COVERS = "/media/roms/.covers"
+ROMS = os.environ.get("OIKOS_ROMS", f"{MEDIA}/roms")
+COVERS = f"{ROMS}/.covers"
 
 # --- sistemas e como lancar ---
 SYSTEMS = {
@@ -984,13 +988,33 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
+    def _authed(self):
+        # No token set -> open (trusted LAN). Otherwise accept ?t=<token> (first
+        # visit) or the cookie it sets. Cookies auto-attach to same-origin fetches.
+        if not TOKEN:
+            return True
+        if parse_qs(urlparse(self.path).query).get("t", [""])[0] == TOKEN:
+            return True
+        return f"oikos={TOKEN}" in self.headers.get("Cookie", "")
+
+    def _deny(self):
+        self.send_response(401)
+        self.send_header("Content-Type", "text/plain")
+        self.end_headers()
+        self.wfile.write(b"unauthorized: append ?t=<token>")
+
     def do_GET(self):
+        if not self._authed():
+            return self._deny()
         path = urlparse(self.path).path
         if path == "/" or path == "":
             body = PAGE.encode()
             self.send_response(200)
             self.send_header("Content-Type", "text/html; charset=utf-8")
             self.send_header("Cache-Control", "no-store")
+            if TOKEN:   # persist the token so later requests carry it
+                self.send_header("Set-Cookie",
+                                 f"oikos={TOKEN}; Path=/; Max-Age=31536000; SameSite=Lax")
             self.send_header("Content-Length", str(len(body)))
             self.end_headers()
             self.wfile.write(body)
@@ -1123,6 +1147,8 @@ class Handler(BaseHTTPRequestHandler):
             self.send_response(404); self.end_headers()
 
     def do_POST(self):
+        if not self._authed():
+            return self._deny()
         path = urlparse(self.path).path
         n = int(self.headers.get("Content-Length", 0))
         raw = self.rfile.read(n) if n else b"{}"
@@ -1174,7 +1200,7 @@ class Handler(BaseHTTPRequestHandler):
                 subprocess.run(["stop-game"])
                 STATE["cover"] = d.get("cover")
                 STATE["mkind"] = d.get("kind")
-                launcher = "musica" if d.get("kind") == "music" else "filme"
+                launcher = "play-audio" if d.get("kind") == "music" else "play-video"
                 args = " ".join("'" + p.replace("'", "'\\''") + "'" for p in items)
                 sway_exec(f"{launcher} {args}")
                 self._json({"ok": True})

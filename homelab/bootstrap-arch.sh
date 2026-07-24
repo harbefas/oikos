@@ -51,7 +51,7 @@ sudo usermod -aG docker "$USER_NAME"   # takes effect on next login
 
 # --- 3. media dirs (setgid + shared group so arrs can hardlink) -----------
 say "Creating $MEDIA (setgid, group $USER_NAME)"
-sudo mkdir -p "$MEDIA"/{downloads/{incomplete,filmes,series,musica},filmes,series,musica,roms/{ps2,n64},roms/.covers}
+sudo mkdir -p "$MEDIA"/{downloads/{incomplete,movies,series,music},movies,series,music,roms/{ps2,n64},roms/.covers}
 sudo chown -R "$USER_NAME:$USER_NAME" "$MEDIA"
 sudo find "$MEDIA" -type d -exec chmod 2775 {} +   # setgid: new files inherit group
 
@@ -69,7 +69,7 @@ sudo tee /etc/systemd/system/transmission.service.d/override.conf >/dev/null <<E
 UMask=0002
 EOF
 sudo systemctl enable transmission || warn "enable transmission manually"
-warn "Set Transmission download dir to $MEDIA/downloads and categories filmes/series/musica in its config, then: sudo systemctl restart transmission"
+warn "Set Transmission download dir to $MEDIA/downloads and categories movies/series/music in its config, then: sudo systemctl restart transmission"
 
 # --- 6. Console Hub + launchers -------------------------------------------
 say "Installing Console Hub + launchers"
@@ -103,7 +103,7 @@ cat <<EOF
      Inside containers, reach each other + Transmission via 172.17.0.1 (NOT localhost).
   4. In Radarr/Sonarr: add download client Transmission (172.17.0.1:9091),
      set a 1080p quality profile, add remote path map /media/ -> /downloads/.
-  5. Jellyfin (http://$IP:8096): add libraries /media/filmes and /media/series,
+  5. Jellyfin (http://$IP:8096): add libraries /media/movies and /media/series,
      enable VAAPI hardware transcoding.
   6. Bazarr: enable a language + create a profile + apply it (three screens).
   7. Edit /opt/console-hub/console-hub.py if your paths/ports differ, put the
