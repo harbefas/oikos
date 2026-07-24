@@ -103,6 +103,11 @@ Navidrome), installs the hub + launchers as a service, and prints a checklist fo
 the parts that can't be scripted (Tailscale login, indexers, quality profiles,
 Jellyfin libraries, Bazarr languages). It is idempotent; review it before running.
 
+The manual checklist is also written as an agent prompt:
+[`homelab/agent-config-prompt.md`](homelab/agent-config-prompt.md). Paste it to a
+coding agent with shell access on the box and it wires the arr stack, quality caps,
+Jellyfin and Bazarr through their APIs (asking you for indexer credentials).
+
 ## Notes
 
 - Covers for games come from [libretro-thumbnails](https://github.com/libretro-thumbnails);

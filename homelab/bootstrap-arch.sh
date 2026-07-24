@@ -89,6 +89,7 @@ sudo systemctl enable console-hub || warn "start console-hub after configuring p
 # --- done ------------------------------------------------------------------
 IP="$(ip -4 addr show scope global | grep -oP '(?<=inet )[\d.]+' | head -1)"
 say "Base install done. Manual steps left:"
+warn "Steps 3-9 below can be done for you: paste homelab/agent-config-prompt.md to a coding agent with shell access on this box."
 cat <<EOF
 
   1. Log out/in (or 'newgrp docker') so the docker group applies.
