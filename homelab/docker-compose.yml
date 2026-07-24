@@ -1,0 +1,92 @@
+# Media stack for the homelab. One /media mount per container so hardlinks
+# work (separate /downloads + /movies mounts are cross-device and break them).
+# PUID/PGID must match the user that owns /media (see bootstrap-arch.sh).
+# Transmission runs on the HOST (systemd), not here, to keep permissions sane.
+
+services:
+  jellyfin:
+    image: jellyfin/jellyfin:latest
+    container_name: jellyfin
+    restart: unless-stopped
+    network_mode: host          # simplest for DLNA/discovery
+    devices:
+      - /dev/dri:/dev/dri       # Intel/AMD hardware transcoding
+    group_add: ["video", "render"]
+    volumes:
+      - ./config/jellyfin:/config
+      - /media:/media
+
+  radarr:
+    image: lscr.io/linuxserver/radarr:latest
+    container_name: radarr
+    restart: unless-stopped
+    environment: ["PUID=${PUID}", "PGID=${PGID}", "TZ=${TZ}"]
+    ports: ["7878:7878"]
+    volumes:
+      - ./config/radarr:/config
+      - /media:/media
+
+  sonarr:
+    image: lscr.io/linuxserver/sonarr:latest
+    container_name: sonarr
+    restart: unless-stopped
+    environment: ["PUID=${PUID}", "PGID=${PGID}", "TZ=${TZ}"]
+    ports: ["8989:8989"]
+    volumes:
+      - ./config/sonarr:/config
+      - /media:/media
+
+  lidarr:
+    image: lscr.io/linuxserver/lidarr:latest
+    container_name: lidarr
+    restart: unless-stopped
+    environment: ["PUID=${PUID}", "PGID=${PGID}", "TZ=${TZ}"]
+    ports: ["8686:8686"]
+    volumes:
+      - ./config/lidarr:/config
+      - /media:/media
+
+  prowlarr:
+    image: lscr.io/linuxserver/prowlarr:latest
+    container_name: prowlarr
+    restart: unless-stopped
+    environment: ["PUID=${PUID}", "PGID=${PGID}", "TZ=${TZ}"]
+    ports: ["9696:9696"]
+    volumes:
+      - ./config/prowlarr:/config
+
+  bazarr:
+    image: lscr.io/linuxserver/bazarr:latest
+    container_name: bazarr
+    restart: unless-stopped
+    environment: ["PUID=${PUID}", "PGID=${PGID}", "TZ=${TZ}"]
+    ports: ["6767:6767"]
+    volumes:
+      - ./config/bazarr:/config
+      - /media:/media
+
+  jellyseerr:
+    image: fallenbagel/jellyseerr:latest
+    container_name: jellyseerr
+    restart: unless-stopped
+    environment: ["TZ=${TZ}"]
+    ports: ["5055:5055"]
+    volumes:
+      - ./config/jellyseerr:/app/config
+
+  flaresolverr:
+    image: ghcr.io/flaresolverr/flaresolverr:latest
+    container_name: flaresolverr
+    restart: unless-stopped
+    ports: ["8191:8191"]
+
+  navidrome:
+    image: deluan/navidrome:latest
+    container_name: navidrome
+    restart: unless-stopped
+    environment:
+      ND_MUSICFOLDER: /music
+    ports: ["4533:4533"]
+    volumes:
+      - ./config/navidrome:/data
+      - /media/musica:/music:ro   # Lidarr writes, Navidrome only reads

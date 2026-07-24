@@ -87,6 +87,22 @@ WantedBy=multi-user.target
 sudo systemctl enable --now console-hub
 ```
 
+## Whole-homelab bootstrap (Arch)
+
+To stand up the full stack, not just the hub, [`homelab/`](homelab/) has an
+Arch bootstrap:
+
+```bash
+./homelab/bootstrap-arch.sh
+```
+
+It installs deps, creates `/media` with the permissions hardlinks need, brings up
+the media stack ([`homelab/docker-compose.yml`](homelab/docker-compose.yml):
+Jellyfin, Radarr, Sonarr, Lidarr, Prowlarr, Bazarr, Jellyseerr, FlareSolverr,
+Navidrome), installs the hub + launchers as a service, and prints a checklist for
+the parts that can't be scripted (Tailscale login, indexers, quality profiles,
+Jellyfin libraries, Bazarr languages). It is idempotent; review it before running.
+
 ## Notes
 
 - Covers for games come from [libretro-thumbnails](https://github.com/libretro-thumbnails);
