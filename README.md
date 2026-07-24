@@ -99,6 +99,7 @@ variables, so you can override them in the systemd unit without editing code:
 | Port | `8100` | `PORT` | — |
 | Jellyfin | `http://localhost:8096` | `JF` | — |
 | Radarr / Sonarr | `http://localhost:{7878,8989}` | `RADARR` / `SONARR` | — |
+| Login password | *(none)* | `PASSWORD` | `OIKOS_PASSWORD` |
 | Auth token | *(none)* | `TOKEN` | `OIKOS_TOKEN` |
 
 API keys are **read from disk at runtime**, never hardcoded: Jellyfin from
@@ -288,12 +289,16 @@ processes on the host** (emulators, mpv) on request. Treat it accordingly.
 - **Trust boundary is the network.** Run it on your LAN, and reach it from outside
   over Tailscale (or another VPN). **Never** port-forward `:8100` to the internet or
   put it behind a public reverse proxy. There is no sandbox around what it can start.
-- **Optional shared token.** Set `OIKOS_TOKEN` (env var) and every request must carry
-  it. First visit with `http://<host>:8100/?t=<token>` sets a cookie; after that the
-  phone just works. Unset (the default) means no auth — fine on a LAN you control,
-  handy when you share a Tailscale node with someone you don't want launching games.
-  It is a single shared secret over HTTP, not real user auth — a speed bump, not a wall.
-- **No TLS by itself.** Plain HTTP. If you want encryption end to end, front it with
+- **Optional login.** Set `OIKOS_PASSWORD` and the hub shows a **login screen** — a
+  password field; the right password sets a long-lived cookie so the phone stays in.
+  Prefer this for anything shared. Or set `OIKOS_TOKEN` for a formless URL token
+  (`http://<host>:8100/?t=<token>`) good for a bookmark. Set both, either works.
+  Unset (the default) means no auth — fine on a LAN you fully control.
+- **What the login is and isn't.** One shared password over plain HTTP; the cookie
+  holds its SHA-256, not the password. It keeps casual devices on your network (or a
+  shared Tailscale node) out. It is **not** per-user auth and, without TLS, not proof
+  against someone sniffing your wire — a lock on the door, not a vault.
+- **No TLS by itself.** Plain HTTP. For encryption end to end, front it with
   `tailscale serve` (Tailscale-issued cert) rather than exposing it.
 
 ## Notes

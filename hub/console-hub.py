@@ -8,14 +8,20 @@ Estende o padserver. Alem de servir os gamepads virtuais (uinput), oferece:
 
 Lanca via `swaymsg exec` na sessao Sway. Sem app no celular.
 """
-import json, os, socket, struct, subprocess, urllib.parse, urllib.request, zlib
+import hashlib, json, os, socket, struct, subprocess, urllib.parse, urllib.request, zlib
 from urllib.parse import urlparse, parse_qs
 
 MPV_SOCK = "/tmp/mpv.sock"
 # Paths and the optional auth token are env-configurable so you don't have to edit
 # code. Defaults are English; override any of them in the systemd unit or shell.
 MEDIA = os.environ.get("OIKOS_MEDIA", "/media")
-TOKEN = os.environ.get("OIKOS_TOKEN", "")   # shared secret; empty = no auth (LAN only)
+# Auth (all optional; unset both = open on LAN):
+#   OIKOS_PASSWORD -> a login screen with a password field
+#   OIKOS_TOKEN    -> a URL token (?t=), handy for a bookmark, no form
+# Either one, once accepted, is remembered in the `oikos` cookie.
+TOKEN = os.environ.get("OIKOS_TOKEN", "")
+PASSWORD = os.environ.get("OIKOS_PASSWORD", "")
+PWHASH = hashlib.sha256(PASSWORD.encode()).hexdigest() if PASSWORD else ""
 STATE = {"cover": None, "mkind": None}   # do que esta tocando (setado no /api/play)
 
 
@@ -976,6 +982,27 @@ if(_t && (TABS.includes(_t)||_t==='pad')) showTab(_t);
 </script></body></html>"""
 
 
+LOGIN_PAGE = """<!doctype html><html><head><meta charset=utf-8>
+<meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Oikos</title><style>
+html,body{height:100%;margin:0;background:#0c0e13;color:#e7eaf0;
+  font-family:system-ui,sans-serif;display:flex;align-items:center;justify-content:center}
+form{display:flex;flex-direction:column;gap:14px;width:min(320px,82vw);text-align:center}
+h1{margin:0 0 6px;font-size:26px;letter-spacing:.5px}
+input{padding:14px 16px;border-radius:12px;border:1px solid #ffffff1a;
+  background:#161a22;color:#e7eaf0;font-size:16px}
+button{padding:14px;border:0;border-radius:12px;background:#2f6df0;color:#fff;
+  font-size:16px;font-weight:600}
+.err{color:#ff7a7a;font-size:14px;min-height:18px}
+</style></head><body>
+<form method=post action=/login>
+  <h1>Oikos</h1>
+  <input type=password name=password placeholder=Senha autofocus autocomplete=current-password>
+  <div class=err><!--err--></div>
+  <button>Entrar</button>
+</form></body></html>"""
+
+
 class Handler(BaseHTTPRequestHandler):
     def log_message(self, *a):
         pass
@@ -989,13 +1016,15 @@ class Handler(BaseHTTPRequestHandler):
         self.wfile.write(body)
 
     def _authed(self):
-        # No token set -> open (trusted LAN). Otherwise accept ?t=<token> (first
-        # visit) or the cookie it sets. Cookies auto-attach to same-origin fetches.
-        if not TOKEN:
+        # Neither set -> open (trusted LAN). Otherwise accept ?t=<token>, or the
+        # `oikos` cookie holding the token or the password hash. Cookies auto-attach
+        # to same-origin fetches, so the phone stays logged in.
+        if not TOKEN and not PASSWORD:
             return True
-        if parse_qs(urlparse(self.path).query).get("t", [""])[0] == TOKEN:
+        if TOKEN and parse_qs(urlparse(self.path).query).get("t", [""])[0] == TOKEN:
             return True
-        return f"oikos={TOKEN}" in self.headers.get("Cookie", "")
+        cookie = self.headers.get("Cookie", "")
+        return any(v and f"oikos={v}" in cookie for v in (TOKEN, PWHASH))
 
     def _deny(self):
         self.send_response(401)
@@ -1003,10 +1032,40 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(b"unauthorized: append ?t=<token>")
 
+    def _login_page(self, err=""):
+        body = LOGIN_PAGE.replace("<!--err-->", err).encode()
+        self.send_response(401 if err else 200)
+        self.send_header("Content-Type", "text/html; charset=utf-8")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+    def _login(self):
+        n = int(self.headers.get("Content-Length", 0))
+        raw = self.rfile.read(n) if n else b""
+        if "json" in self.headers.get("Content-Type", ""):
+            try:
+                pw = json.loads(raw or b"{}").get("password", "")
+            except Exception:
+                pw = ""
+        else:
+            pw = parse_qs(raw.decode("utf-8", "ignore")).get("password", [""])[0]
+        if PASSWORD and hashlib.sha256(pw.encode()).hexdigest() == PWHASH:
+            self.send_response(303)
+            self.send_header("Set-Cookie",
+                             f"oikos={PWHASH}; Path=/; Max-Age=31536000; SameSite=Lax")
+            self.send_header("Location", "/")
+            self.end_headers()
+        else:
+            self._login_page("Wrong password")
+
     def do_GET(self):
-        if not self._authed():
-            return self._deny()
         path = urlparse(self.path).path
+        if not self._authed():
+            # login form only at the root; everything else gets a clean 401
+            if PASSWORD and (path == "/" or path == ""):
+                return self._login_page()
+            return self._deny()
         if path == "/" or path == "":
             body = PAGE.encode()
             self.send_response(200)
@@ -1147,9 +1206,11 @@ class Handler(BaseHTTPRequestHandler):
             self.send_response(404); self.end_headers()
 
     def do_POST(self):
+        path = urlparse(self.path).path
+        if path == "/login":
+            return self._login()
         if not self._authed():
             return self._deny()
-        path = urlparse(self.path).path
         n = int(self.headers.get("Content-Length", 0))
         raw = self.rfile.read(n) if n else b"{}"
         try:
