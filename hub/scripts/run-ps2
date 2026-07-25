@@ -1,7 +1,12 @@
 #!/bin/bash
-# Lanca o PCSX2 dentro da sessao Sway. Sem WAYLAND_DISPLAY exportado
-# o Qt nao acha o compositor e abre em display "null" (tela preta).
-export WAYLAND_DISPLAY=wayland-1
-export XDG_RUNTIME_DIR=/run/user/1000
+# Lanca o PCSX2 na sessao grafica. Sem WAYLAND_DISPLAY exportado o Qt nao acha
+# o compositor e abre em display "null" (tela preta).
+# PCSX2 pode ser sobrescrito (ex.: um AppImage): PCSX2=~/pcsx2.AppImage run-ps2 jogo.iso
+export WAYLAND_DISPLAY="${WAYLAND_DISPLAY:-wayland-1}"
+export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run/user/1000}"
 export QT_QPA_PLATFORM=wayland
-exec pcsx2-qt "$@" &> /tmp/pcsx2.log
+BIN="${PCSX2:-pcsx2-qt}"
+case "$BIN" in
+  *.AppImage) exec "$BIN" --appimage-extract-and-run "$@" &> /tmp/pcsx2.log ;;
+  *)          exec "$BIN" "$@" &> /tmp/pcsx2.log ;;
+esac

@@ -275,10 +275,11 @@ def list_games():
 
 
 def running_game():
-    for proc in ("pcsx2-qt", "retroarch", "mpv"):
-        r = subprocess.run(["pgrep", "-x", proc], capture_output=True)
-        if r.returncode == 0:
-            return proc
+    # match por comm (substring, sem -x): cobre binario nativo, flatpak e AppImage
+    # (ex.: PCSX2 via AppImage aparece como "pcsx2.AppImage", nao "pcsx2-qt").
+    for pat, name in (("mpv", "mpv"), ("pcsx2", "pcsx2-qt"), ("retroarch", "retroarch")):
+        if subprocess.run(["pgrep", pat], capture_output=True).returncode == 0:
+            return name
     return None
 
 
@@ -301,9 +302,12 @@ def list_recent(n=12):
 
 
 # --- biblioteca de midia via API do Jellyfin ---
-JF = "http://localhost:8096"
+JF = os.environ.get("OIKOS_JF", "http://localhost:8096")
+# a key pode vir direta (OIKOS_JF_KEY) ou de um arquivo (OIKOS_JF_KEY_FILE)
 try:
-    JF_KEY = open("/srv/jellyfin/console-hub.key").read().strip()
+    JF_KEY = (os.environ.get("OIKOS_JF_KEY", "").strip()
+              or open(os.environ.get("OIKOS_JF_KEY_FILE",
+                                     "/srv/jellyfin/console-hub.key")).read().strip())
 except Exception:
     JF_KEY = ""
 

@@ -50,7 +50,10 @@ input_player2_joypad_index = "1" # second virtual pad -> player 2
 ## PS2 (PCSX2)
 
 Install `pcsx2-latest-bin` from the AUR (prebuilt binary; avoids a compile that has
-failed on low-RAM boxes). Then:
+failed on low-RAM boxes), or grab the official **AppImage** if you can't use the AUR
+(no root needed). `run-ps2` calls `pcsx2-qt` by default; point it elsewhere with the
+`PCSX2` env var, e.g. `PCSX2=~/pcsx2.AppImage` (it adds `--appimage-extract-and-run`
+automatically on `.AppImage`). Then:
 
 - **BIOS** (yours): put e.g. `scph39001.bin` (NTSC-U) in `~/.config/PCSX2/bios/`.
 - **Renderer:** Vulkan (`Renderer = 14`), native 1x upscale, vsync off, in
