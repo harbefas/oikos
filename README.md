@@ -72,7 +72,14 @@ plus [`python-evdev`](https://pypi.org/project/evdev/). No app, no HTTPS require
 - **Music** — albums from a folder, played as an mpv playlist.
 - **Media remote** — the same page becomes play/pause, seek, volume, audio/subtitle
   cycling and prev/next, over mpv's IPC socket. It switches between gamepad and
-  remote automatically based on what is running.
+  remote automatically based on what is running. The now-playing cover fills the
+  background, and subtitle/audio delay steppers fix lip-sync from the couch.
+- **Continue watching** — a row of films you left partway, read from mpv's saved
+  positions (matched to the library by hash, so it carries the real poster). Tap to
+  resume where you stopped.
+- **See the TV** — a button grabs the current TV frame (via `grim`) and shows it on
+  the phone, refreshing every couple of seconds. Debugging what is on screen without
+  getting up, and handy when the set is in another room.
 
 ### Requirements
 
@@ -101,6 +108,12 @@ variables, so you can override them in the systemd unit without editing code:
 | Radarr / Sonarr | `http://localhost:{7878,8989}` | `RADARR` / `SONARR` | — |
 | Login password | *(none)* | `PASSWORD` | `OIKOS_PASSWORD` |
 | Auth token | *(none)* | `TOKEN` | `OIKOS_TOKEN` |
+| mpv user home | *(current user)* | — | `OIKOS_HOME` |
+
+`OIKOS_HOME` only matters if the hub runs as a different user than mpv (e.g. the hub
+as root, mpv as your desktop user): point it at that user's home so "continue
+watching" can find mpv's saved positions. "See the TV" needs `grim` and reads the
+Sway session on `WAYLAND_DISPLAY=wayland-1`, `XDG_RUNTIME_DIR=/run/user/1000`.
 
 API keys are **read from disk at runtime**, never hardcoded: Jellyfin from
 `/srv/jellyfin/console-hub.key`, Radarr/Sonarr from each container's `config.xml`.

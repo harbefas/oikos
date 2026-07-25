@@ -33,7 +33,7 @@ sudo pacman -Syu --needed --noconfirm \
   git python python-evdev mpv \
   docker docker-compose \
   intel-media-driver libva-utils vulkan-intel \
-  sway retroarch \
+  sway retroarch grim \
   transmission-cli tailscale
 # retroarch cores come separately:
 sudo pacman -S --needed --noconfirm libretro-mupen64plus-next 2>/dev/null || \

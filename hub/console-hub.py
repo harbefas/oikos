@@ -51,6 +51,8 @@ def mpv_now_playing():
         "pos": mpv_cmd(["get_property", "time-pos"]) or 0,
         "duration": mpv_cmd(["get_property", "duration"]) or 0,
         "paused": bool(mpv_cmd(["get_property", "pause"])),
+        "subdelay": mpv_cmd(["get_property", "sub-delay"]) or 0,
+        "audiodelay": mpv_cmd(["get_property", "audio-delay"]) or 0,
     }
 
 
@@ -66,7 +68,65 @@ MPV_ACTIONS = {
     "audio":     ["cycle", "audio"],
     "next":      ["playlist-next"],
     "prev":      ["playlist-prev"],
+    # sincronia de legenda/audio (dessincronizacao e comum)
+    "subdelay+":   ["add", "sub-delay", 0.1],
+    "subdelay-":   ["add", "sub-delay", -0.1],
+    "subdelay0":   ["set", "sub-delay", 0],
+    "audiodelay+": ["add", "audio-delay", 0.1],
+    "audiodelay-": ["add", "audio-delay", -0.1],
+    "audiodelay0": ["set", "audio-delay", 0],
 }
+
+
+def tv_frame():
+    """Captura o frame atual da sessao Sway (grim), JPEG reduzido pra caber no wifi."""
+    env = {**os.environ, "WAYLAND_DISPLAY": "wayland-1",
+           "XDG_RUNTIME_DIR": "/run/user/1000"}
+    try:
+        r = subprocess.run(["grim", "-s", "0.5", "-t", "jpeg", "-q", "55", "-"],
+                           capture_output=True, env=env, timeout=5)
+        return r.stdout if r.returncode == 0 else b""
+    except Exception:
+        return b""
+
+
+def list_resume(n=12):
+    """Filmes com posicao salva pelo mpv (--save-position-on-quit) = continuar de onde parou.
+    O mpv nomeia cada watch_later por md5(path).upper(); casamos pela biblioteca, o que
+    tambem devolve o poster do Jellyfin. OIKOS_HOME = home do usuario que roda o mpv."""
+    home = os.environ.get("OIKOS_HOME", os.path.expanduser("~"))
+    wl = os.path.join(home, ".local/state/mpv/watch_later")
+    if not os.path.isdir(wl):
+        wl = os.path.join(home, ".config/mpv/watch_later")
+    if not os.path.isdir(wl):
+        return []
+    files = set(os.listdir(wl))
+    try:
+        movies = list_movies()
+    except Exception:
+        movies = []
+    out = []
+    for m in movies:
+        p = m.get("path")
+        if not p:
+            continue
+        h = hashlib.md5(p.encode()).hexdigest().upper()
+        if h not in files:
+            continue
+        fp = os.path.join(wl, h)
+        pos = 0.0
+        try:
+            for line in open(fp, encoding="utf-8", errors="ignore"):
+                if line.startswith("start="):
+                    pos = float(line.split("=", 1)[1])
+                    break
+        except (OSError, ValueError):
+            continue
+        out.append({"name": m.get("name") or os.path.basename(p), "path": p,
+                    "pos": pos, "cover": m.get("cover"), "type": "movie",
+                    "mtime": os.path.getmtime(fp)})
+    out.sort(key=lambda x: x["mtime"], reverse=True)
+    return out[:n]
 MUSIC = os.environ.get("OIKOS_MUSIC", f"{MEDIA}/music")
 
 
@@ -425,10 +485,10 @@ html,body{height:100%;color:#eef1f6;overflow:hidden;
   border-radius:6px;font-size:8.5px;font-weight:700;padding:3px 6px;letter-spacing:.06em}
 .sec{padding:18px 15px 6px;font-size:12px;font-weight:700;color:#6b7280;
   letter-spacing:.1em;text-transform:uppercase}
-/* faixa horizontal de recentes */
-#recent{display:flex;gap:12px;overflow-x:auto;padding:4px 14px 6px;scroll-snap-type:x proximity;
+/* faixa horizontal de recentes / continuar */
+#recent,#resume{display:flex;gap:12px;overflow-x:auto;padding:4px 14px 6px;scroll-snap-type:x proximity;
   -webkit-overflow-scrolling:touch;scrollbar-width:none}
-#recent::-webkit-scrollbar{display:none}
+#recent::-webkit-scrollbar,#resume::-webkit-scrollbar{display:none}
 .rcard{flex:0 0 128px;scroll-snap-align:start;background:#161a22;border-radius:14px;
   overflow:hidden;position:relative;aspect-ratio:3/4;border:1px solid #ffffff0d;
   box-shadow:0 4px 16px #0006;transition:transform .13s}
@@ -576,6 +636,33 @@ body[data-mode=media] #dpad{display:none}   /* esconde TODO o gamepad (incl. d-p
 /* prev/next so em serie e musica; filme nao tem faixa anterior/proxima */
 body[data-media=movie] .mc-track{display:none}
 
+/* ---- now-playing backdrop: capa borrada atras do controle de midia ---- */
+#np-bg{position:absolute;inset:0;background-size:cover;background-position:center;
+  filter:blur(38px) brightness(.4) saturate(1.25);transform:scale(1.3);
+  opacity:0;transition:opacity .5s;pointer-events:none;z-index:0}
+body[data-mode=media] #np-bg.on{opacity:1}
+#mediactl{z-index:1}
+/* ---- sincronia legenda/audio (so em video) ---- */
+#mc-sync{display:flex;flex-direction:column;gap:8px;align-items:center;width:min(560px,90vw)}
+body[data-media=music] #mc-sync{display:none}
+.mc-syncrow{display:flex;align-items:center;gap:10px;justify-content:center;
+  font-size:clamp(12px,2.5vmin,16px);opacity:.9}
+.mc-syncrow .lb{width:clamp(66px,16vmin,96px);text-align:right;opacity:.7}
+.mc-syncrow .vv{width:clamp(52px,13vmin,74px);text-align:center;font-variant-numeric:tabular-nums;font-weight:700}
+.mc-syncrow button{width:clamp(34px,9vmin,48px);height:clamp(34px,9vmin,48px);
+  border-radius:50%;font-size:clamp(14px,3vmin,20px)}
+/* ---- ver a TV (grim) ---- */
+#tvbtn{position:absolute;top:clamp(10px,3vmin,22px);right:4vw;
+  width:clamp(40px,9vmin,60px);height:clamp(40px,9vmin,60px);border-radius:50%;
+  background:#2b303c;border:0;color:#e8e8e8;font-size:clamp(18px,4vmin,26px);opacity:.8;z-index:3}
+body[data-inpad="1"] #tvbtn{display:block}
+#tvbtn{display:none}
+#tvview{position:fixed;inset:0;z-index:50;background:#000d;display:none;
+  align-items:center;justify-content:center;flex-direction:column;gap:14px}
+#tvview.on{display:flex}
+#tvimg{max-width:96vw;max-height:82vh;border-radius:10px;box-shadow:0 10px 40px #000a;background:#111}
+#tvclose{width:54px;height:54px;border-radius:50%;border:0;background:#2b303c;color:#fff;font-size:22px}
+
 /* ===================== POLISH ===================== */
 /* transicao suave ao trocar de aba */
 .view.on{animation:fadeup .28s cubic-bezier(.2,.7,.3,1)}
@@ -619,6 +706,10 @@ body[data-media=movie] .mc-track{display:none}
 
   <div class="view" id=v-movies>
     <div class=searchbar><input class=si type=search data-kind=movie placeholder="Buscar filme para baixar…" enterkeyhint=search><button class=sx style=display:none>✕</button></div>
+    <div id=resume-wrap style=display:none>
+      <div class=sec>Continuar</div>
+      <div id=resume></div>
+    </div>
     <div id=movies class=pgrid></div>
   </div>
   <div class="view" id=v-series>
@@ -638,6 +729,8 @@ body[data-media=movie] .mc-track{display:none}
 <div id=toast></div>
 
 <div id=pad>
+  <div id=np-bg></div>
+  <button id=tvbtn onclick="openTv()">📺</button>
   <div class="p" id=tl><button class=trig data-b=l>L</button><button class="trig" id=bz data-b=z>Z</button></div>
   <div class="p" id=tr><button class=trig data-b=r>R</button></div>
   <div class="p" id=mid><button id=tomenu>☰</button><button data-b=start>START</button><span id=pnum>P1</span><button data-b=select>SEL</button></div>
@@ -664,8 +757,23 @@ body[data-media=movie] .mc-track{display:none}
       <button data-mpv=sub>💬 legenda</button>
       <button data-mpv=volup>🔊</button>
     </div>
+    <div id=mc-sync class=mc-vid>
+      <div class=mc-syncrow>
+        <span class=lb>💬 legenda</span>
+        <button data-mpv=subdelay->−</button>
+        <span class=vv id=mc-subd onclick="mpvBtn('subdelay0')">0.0s</span>
+        <button data-mpv=subdelay+>+</button>
+      </div>
+      <div class=mc-syncrow>
+        <span class=lb>🔊 áudio</span>
+        <button data-mpv=audiodelay->−</button>
+        <span class=vv id=mc-audd onclick="mpvBtn('audiodelay0')">0.0s</span>
+        <button data-mpv=audiodelay+>+</button>
+      </div>
+    </div>
   </div>
 </div>
+<div id=tvview onclick="closeTv()"><img id=tvimg alt="TV"><button id=tvclose>✕</button></div>
 
 <div id=miniplayer onclick="showTab('pad')">
   <img id=mp-art alt="">
@@ -739,6 +847,12 @@ function updateMedia(now){
   const art=document.getElementById('mc-art');
   if(now.cover){ if(art.getAttribute('src')!==now.cover) art.src=now.cover; art.classList.add('on'); }
   else { art.classList.remove('on'); art.removeAttribute('src'); }
+  const bg=document.getElementById('np-bg');
+  if(now.cover){ const u=`url(${now.cover})`; if(bg.style.backgroundImage!==u) bg.style.backgroundImage=u; bg.classList.add('on'); }
+  else bg.classList.remove('on');
+  const sd=document.getElementById('mc-subd'), ad=document.getElementById('mc-audd');
+  if(sd) sd.textContent=(now.subdelay>0?'+':'')+(now.subdelay||0).toFixed(1)+'s';
+  if(ad) ad.textContent=(now.audiodelay>0?'+':'')+(now.audiodelay||0).toFixed(1)+'s';
 }
 
 // ---------- filmes / series ----------
@@ -750,10 +864,25 @@ function posterCard(item, onclick){
 }
 async function loadMovies(){
   skeletons(document.getElementById('movies'),'post',10);
+  loadResume();
   const m=await fetch('/api/movies').then(r=>r.json()).catch(()=>[]);
   const el=document.getElementById('movies'); el.innerHTML='';
   if(!m.length){el.innerHTML='<div style="padding:20px;opacity:.5">nenhum filme</div>';return;}
   for(const mv of m) el.appendChild(posterCard(mv, ()=>play(mv.path,'movie',mv.cover)));
+}
+async function loadResume(){
+  const r=await fetch('/api/resume').then(x=>x.json()).catch(()=>[]);
+  const wrap=document.getElementById('resume-wrap'), el=document.getElementById('resume');
+  if(!r.length){wrap.style.display='none';return;}
+  wrap.style.display='block'; el.innerHTML='';
+  for(const it of r){
+    const c=document.createElement('div'); c.className='rcard';
+    const mins=Math.floor((it.pos||0)/60), badge=mins>0?`▶ ${mins}min`:'▶';
+    const cov=it.cover?`background-image:url(${it.cover})`:'';
+    c.innerHTML=`<div class=rc style="${cov}">${it.cover?'':'🎬'}</div><div class=rt>${badge}</div><div class=rn>${it.name}</div>`;
+    c.onclick=()=>play(it.path,'movie',it.cover);
+    el.appendChild(c);
+  }
 }
 
 // ---------- toast ----------
@@ -935,6 +1064,18 @@ async function mpvBtn(action){
 }
 async function stop(){ await fetch('/api/stop',{method:'POST'}); document.getElementById('miniplayer').classList.remove('on'); setTimeout(refreshStatus,800); }
 
+// ---------- ver a TV (grim) ----------
+let tvTimer=null;
+function tvTick(){
+  const img=document.getElementById('tvimg');
+  const u='/api/tv?'+Date.now();
+  const pre=new Image();
+  pre.onload=()=>{img.src=u;};
+  pre.src=u;
+}
+function openTv(){ document.getElementById('tvview').classList.add('on'); tvTick(); tvTimer=setInterval(tvTick,2500); }
+function closeTv(){ document.getElementById('tvview').classList.remove('on'); clearInterval(tvTimer); tvTimer=null; }
+
 // ---------- gamepad (controle) ----------
 const post=o=>{o.p=P;return fetch('/p',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(o),keepalive:true}).catch(()=>{});};
 const buzz=()=>{try{navigator.vibrate&&navigator.vibrate(8)}catch(_){}};
@@ -1096,6 +1237,19 @@ class Handler(BaseHTTPRequestHandler):
             self._json(APPS)
         elif path == "/api/recent":
             self._json(list_recent())
+        elif path == "/api/resume":
+            self._json(list_resume())
+        elif path == "/api/tv":
+            data = tv_frame()
+            if data:
+                self.send_response(200)
+                self.send_header("Content-Type", "image/jpeg")
+                self.send_header("Cache-Control", "no-store")
+                self.send_header("Content-Length", str(len(data)))
+                self.end_headers()
+                self.wfile.write(data)
+            else:
+                self.send_response(503); self.end_headers()
         elif path == "/api/movies":
             try:
                 self._json(list_movies())
