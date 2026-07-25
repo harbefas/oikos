@@ -83,13 +83,16 @@ plus [`python-evdev`](https://pypi.org/project/evdev/). No app, no HTTPS require
 
 ### Requirements
 
-- Linux with a **Sway** session on the TV (autologin on a TTY works well)
+- Linux with a **Sway or Hyprland** session on the TV (autologin on a TTY works well);
+  it launches through `swaymsg` or `hyprctl` depending on which is running
 - Python 3 and `python-evdev`; `mpv` for video/music; emulators you want (`pcsx2`, `retroarch`)
 - For movies/series: the catalog/download stack on localhost — Jellyfin (`:8096`),
   Radarr (`:7878`), Sonarr (`:8989`). (The games tab doesn't use these, but it still
   needs the emulators, launchers and gamepad autoconfig — see
   [`emulators/`](emulators/).)
-- Runs as a user in the `input` group (to create `uinput` devices)
+- For the gamepad, the user needs access to `/dev/uinput` (be in the `input` group
+  with a udev rule granting it). Without it the hub still runs, just with the gamepad
+  disabled, so you can develop the media side on any desktop.
 
 ### Configuration
 

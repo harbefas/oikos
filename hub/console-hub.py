@@ -220,23 +220,39 @@ BUTTONS = {
 ai = AbsInfo(value=0, min=-AMAX, max=AMAX, fuzz=0, flat=512, resolution=0)
 CAPS = {e.EV_KEY: list(BUTTONS.values()),
         e.EV_ABS: [(e.ABS_X, ai), (e.ABS_Y, ai), (e.ABS_RX, ai), (e.ABS_RY, ai)]}
-PADS = {
-    1: UInput(CAPS, name="Homelab Virtual Gamepad", vendor=0x1234, product=0x5678, version=1),
-    2: UInput(CAPS, name="Homelab Virtual Gamepad", vendor=0x1234, product=0x5678, version=1),
-}
+def _mkpad():
+    """Cria um gamepad uinput; None se /dev/uinput nao estiver acessivel
+    (sem grupo input / sem regra udev). Assim o hub ainda sobe pra midia/UI."""
+    try:
+        return UInput(CAPS, name="Homelab Virtual Gamepad",
+                      vendor=0x1234, product=0x5678, version=1)
+    except Exception as ex:
+        print(f"[warn] uinput indisponivel ({ex}); gamepad off (midia/UI seguem). "
+              f"Pra ligar: usuario no grupo 'input' + regra udev em /dev/uinput.")
+        return None
+
+
+PADS = {1: _mkpad(), 2: _mkpad()}
 
 
 # --- helpers de lancamento ---
 def swaysock():
     out = subprocess.run(["pgrep", "-x", "sway"], capture_output=True, text=True).stdout.split()
-    return f"/run/user/1000/sway-ipc.1000.{out[0]}.sock" if out else ""
+    xdg = os.environ.get("XDG_RUNTIME_DIR", "/run/user/1000")
+    return f"{xdg}/sway-ipc.1000.{out[0]}.sock" if out else ""
 
 
 def sway_exec(cmd):
-    env = {**os.environ, "SWAYSOCK": swaysock(),
-           "WAYLAND_DISPLAY": "wayland-1", "XDG_RUNTIME_DIR": "/run/user/1000"}
-    subprocess.run(["swaymsg", "exec", cmd], env=env,
-                   stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    """Lanca cmd na sessao grafica. Suporta Hyprland (hyprctl) e Sway (swaymsg)."""
+    env = {**os.environ,
+           "WAYLAND_DISPLAY": os.environ.get("WAYLAND_DISPLAY", "wayland-1"),
+           "XDG_RUNTIME_DIR": os.environ.get("XDG_RUNTIME_DIR", "/run/user/1000")}
+    dn = subprocess.DEVNULL
+    if subprocess.run(["pgrep", "-x", "Hyprland"], capture_output=True).returncode == 0:
+        subprocess.run(["hyprctl", "dispatch", "exec", cmd], env=env, stdout=dn, stderr=dn)
+    else:
+        env["SWAYSOCK"] = swaysock()
+        subprocess.run(["swaymsg", "exec", cmd], env=env, stdout=dn, stderr=dn)
 
 
 def list_games():
