@@ -6,8 +6,8 @@ fica sem capa. Guarda em /media/roms/.covers/<system>/<rom-stem>.png
 """
 import os, re, urllib.parse, urllib.request
 
-ROMS = "/media/roms"
-COVERS = "/media/roms/.covers"
+ROMS = os.environ.get("OIKOS_ROMS", "/media/roms")
+COVERS = os.path.join(ROMS, ".covers")
 BASE = "https://raw.githubusercontent.com/libretro-thumbnails"
 
 REPOS = {
