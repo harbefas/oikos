@@ -334,8 +334,11 @@ def list_series():
 
 RADARR = "http://localhost:7878/api/v3"
 try:
-    RADARR_KEY = open("/home/nfvelten/docker/arr-stack/radarr/config.xml").read()
-    RADARR_KEY = RADARR_KEY.split("<ApiKey>")[1].split("</ApiKey>")[0]
+    RADARR_KEY = os.environ.get("OIKOS_RADARR_KEY", "").strip()
+    if not RADARR_KEY:
+        _f = os.environ.get("OIKOS_RADARR_KEY_FILE",
+                            "/home/nfvelten/docker/arr-stack/radarr/config.xml")
+        RADARR_KEY = open(_f).read().split("<ApiKey>")[1].split("</ApiKey>")[0]
 except Exception:
     RADARR_KEY = ""
 
@@ -366,10 +369,11 @@ def request_movie(tmdb_id):
     hits = radarr(f"/movie/lookup/tmdb?tmdbId={tmdb_id}")
     m = hits[0] if isinstance(hits, list) else hits
     qp = radarr("/qualityprofile")[0]["id"]
+    root = radarr("/rootfolder")[0]["path"]   # o que estiver configurado, nao hardcode
     body = {
         "title": m["title"], "tmdbId": m["tmdbId"], "year": m.get("year"),
         "titleSlug": m["titleSlug"], "images": m.get("images", []),
-        "qualityProfileId": qp, "rootFolderPath": "/movies",
+        "qualityProfileId": qp, "rootFolderPath": root,
         "monitored": True, "minimumAvailability": "released",
         "addOptions": {"searchForMovie": True},
     }
@@ -378,10 +382,15 @@ def request_movie(tmdb_id):
 
 SONARR = "http://localhost:8989/api/v3"
 try:
-    SONARR_KEY = subprocess.run(
-        ["docker", "exec", "sonarr", "sh", "-c",
-         'grep -o "<ApiKey>[^<]*" /config/config.xml'],
-        capture_output=True, text=True).stdout.replace("<ApiKey>", "").strip()
+    SONARR_KEY = os.environ.get("OIKOS_SONARR_KEY", "").strip()
+    if not SONARR_KEY and os.environ.get("OIKOS_SONARR_KEY_FILE"):
+        SONARR_KEY = open(os.environ["OIKOS_SONARR_KEY_FILE"]).read() \
+            .split("<ApiKey>")[1].split("</ApiKey>")[0]
+    if not SONARR_KEY:
+        SONARR_KEY = subprocess.run(
+            ["docker", "exec", "sonarr", "sh", "-c",
+             'grep -o "<ApiKey>[^<]*" /config/config.xml'],
+            capture_output=True, text=True).stdout.replace("<ApiKey>", "").strip()
 except Exception:
     SONARR_KEY = ""
 
@@ -420,7 +429,7 @@ def request_series(tvdb_id):
     body = {
         "title": m["title"], "tvdbId": m["tvdbId"], "titleSlug": m["titleSlug"],
         "images": m.get("images", []), "seasons": seasons,
-        "qualityProfileId": qp, "rootFolderPath": "/tv",
+        "qualityProfileId": qp, "rootFolderPath": sonarr("/rootfolder")[0]["path"],
         "monitored": True, "seasonFolder": True,
         "addOptions": {"searchForMissingEpisodes": True, "monitor": "firstSeason"},
     }
