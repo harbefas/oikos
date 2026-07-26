@@ -891,8 +891,8 @@ body[data-p="2"] #pnum{color:var(--p2)}
   background:#000;border:1px solid var(--border);aspect-ratio:16/9;align-items:center;justify-content:center}
 body[data-screen] #deskscreen{display:flex}
 #deskimg{width:100%;height:100%;object-fit:contain;display:block}
-#padrow{flex:1;min-height:0;padding:4px 14px 16px}
-#tpad{width:100%;height:100%;background:var(--surface);border:1px solid var(--border);
+#padrow{flex:1;min-height:0;padding:4px 14px 16px;display:flex;align-items:center;justify-content:center}
+#tpad{width:100%;height:100%;max-height:44vh;background:var(--surface);border:1px solid var(--border);
   border-radius:14px;display:flex;flex-direction:column;align-items:center;justify-content:center;
   gap:6px;color:var(--tx-3);font-size:14px;text-align:center;padding:0 14px;touch-action:none;user-select:none}
 #tpad small{font-size:10.5px;opacity:.7;line-height:1.4}
@@ -942,6 +942,7 @@ body[data-screen] #deskscreen{display:flex}
       <button data-mod=ctrl>Ctrl</button><button data-mod=alt>Alt</button><button data-mod=super>Super</button>
       <button data-key=left>←</button><button data-key=up>↑</button><button data-key=down>↓</button><button data-key=right>→</button>
       <button data-key=backspace>⌫</button><button data-key=enter>⏎</button>
+      <button data-char="1">1</button><button data-char="2">2</button><button data-char="3">3</button>
       <button id=btnsuperc>⊞ C</button>
     </div>
     <div id=padrow>
@@ -1437,6 +1438,8 @@ window.addEventListener('click', goFullscreen);
   // --- teclas especiais + modificadores ---
   for(const b of document.querySelectorAll('#deskkeys button[data-key]')){const k=b.dataset.key;
     b.onclick=()=>{buzz();key({key:k,mods:activeMods()});clearMods();};}
+  for(const b of document.querySelectorAll('#deskkeys button[data-char]')){const ch=b.dataset.char;
+    b.onclick=()=>{buzz();key({char:ch,mods:activeMods()});clearMods();};}
   for(const b of document.querySelectorAll('#deskkeys button[data-mod]')){const mo=b.dataset.mod;
     b.onclick=()=>{mods[mo]=!mods[mo];b.classList.toggle('on',mods[mo]);buzz();};}
 })();
