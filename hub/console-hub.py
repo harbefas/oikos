@@ -885,12 +885,13 @@ body[data-p="2"] #pnum{color:var(--p2)}
 /* apps */
 .app{background:var(--surface)!important;border:1px solid var(--border)!important;color:var(--tx)}
 /* desktop: mouse + teclado */
-#tpad{margin:8px auto 12px;width:min(340px,82vw);height:30vh;max-height:280px;
-  background:var(--surface);border:1px solid var(--border);
+/* trackpad embaixo, largura cheia */
+#padrow{padding:6px 14px 20px;height:42vh}
+#tpad{width:100%;height:100%;background:var(--surface);border:1px solid var(--border);
   border-radius:14px;display:flex;flex-direction:column;align-items:center;justify-content:center;
-  gap:6px;color:var(--tx-3);font-size:14px;text-align:center;padding:0 18px;touch-action:none;user-select:none}
+  gap:6px;color:var(--tx-3);font-size:14px;text-align:center;padding:0 14px;touch-action:none;user-select:none}
 #tpad small{font-size:10.5px;opacity:.7;line-height:1.4}
-#deskbtns{display:flex;gap:10px;padding:0 14px 6px;max-width:400px;margin:0 auto}
+#deskbtns{display:flex;gap:10px;padding:0 14px 6px}
 #deskbtns button{flex:1;padding:15px 8px;background:var(--ui);color:var(--tx);border:0;border-radius:10px;font:inherit;font-weight:600}
 #deskbtns button:active{background:var(--accent);color:#fff}
 #deskkeys{display:flex;flex-wrap:wrap;gap:8px;padding:6px 14px 24px}
@@ -928,13 +929,6 @@ body[data-p="2"] #pnum{color:var(--p2)}
   </div>
 
   <div class="view" id=v-desk>
-    <div class=sec>Mouse</div>
-    <div id=tpad>trackpad<br><small>arraste = move · toque = clique · 2 dedos = rolar · 2 dedos toque = botão direito</small></div>
-    <div id=deskbtns>
-      <button data-clk=left>Clique esq.</button>
-      <button data-clk=mid>Meio</button>
-      <button data-clk=right>Clique dir.</button>
-    </div>
     <div class=sec>Teclado</div>
     <div id=deskkeys>
       <button id=kbtoggle>⌨ Digitar</button>
@@ -942,6 +936,15 @@ body[data-p="2"] #pnum{color:var(--p2)}
       <button data-mod=ctrl>Ctrl</button><button data-mod=alt>Alt</button><button data-mod=super>Super</button>
       <button data-key=left>←</button><button data-key=up>↑</button><button data-key=down>↓</button><button data-key=right>→</button>
       <button data-key=backspace>⌫</button><button data-key=enter>⏎</button>
+    </div>
+    <div class=sec>Mouse</div>
+    <div id=deskbtns>
+      <button data-clk=left>Clique esq.</button>
+      <button data-clk=mid>Meio</button>
+      <button data-clk=right>Clique dir.</button>
+    </div>
+    <div id=padrow>
+      <div id=tpad>trackpad<br><small>arraste move · toque clica · 2 dedos rolar</small></div>
     </div>
     <input id=kbin autocomplete=off autocapitalize=off autocorrect=off spellcheck=false>
   </div>
