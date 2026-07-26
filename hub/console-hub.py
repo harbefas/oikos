@@ -623,22 +623,31 @@ body[data-mode=media] #miniplayer,body[data-inpad=1] #miniplayer{display:none!im
 /* --- estilos do gamepad (copiado do padserver) --- */
 #pad *{touch-action:none}
 .p{position:absolute}
-/* analogico PRINCIPAL: canto inferior esquerdo (polegar esq), grande */
-#ls{left:3vw;bottom:4vh;width:50vh;height:50vh;max-width:360px;max-height:360px;
-  border-radius:50%;background:radial-gradient(circle,#232833,#1a1e26);border:2px solid #333a47}
+/* aparencia dos analogicos + d-pad (posicao vem dos "slots" abaixo) */
+#ls,#dpad,#rs{position:absolute;transition:left .2s,right .2s,bottom .2s,width .2s,height .2s}
+#ls{border-radius:50%;background:radial-gradient(circle,#232833,#1a1e26);border:2px solid #333a47}
 #lk{width:42%;height:42%;background:#4f8cff;box-shadow:0 4px 18px #0009}
-/* analogico direito (C / stick direito): superior direito, menor */
-#rs{right:5vw;top:13vh;width:26vh;height:26vh;max-width:190px;max-height:190px;
-  border-radius:50%;background:radial-gradient(circle,#2a2618,#201d14);border:2px solid #46402a}
+#rs{border-radius:50%;background:radial-gradient(circle,#2a2618,#201d14);border:2px solid #46402a}
 #rk{width:44%;height:44%;background:#e8c33a;box-shadow:0 4px 18px #0009}
 .knob{position:absolute;left:50%;top:50%;border-radius:50%;transform:translate(-50%,-50%);pointer-events:none}
-/* botoes de acao: canto inferior direito (polegar dir), maiores */
-#face{right:4vw;bottom:6vh;display:grid;grid-template-columns:repeat(3,15.5vh);grid-template-rows:repeat(3,15.5vh);gap:1.3vh}
-#face button{border-radius:50%;font-size:4.4vh;background:#333a47}
+#dpad{display:grid;gap:.7vh}
+#dpad button{border-radius:1.6vh;opacity:.9}
+/* SLOT PRIMARIO (grande, canto inf esquerdo): analogico por padrao; d-pad se data-dswap */
+body:not([data-dswap]) #ls, body[data-dswap] #dpad{left:3vw;bottom:4vh}
+body:not([data-dswap]) #ls{width:47vh;height:47vh;max-width:340px;max-height:340px}
+body[data-dswap] #dpad{grid-template-columns:repeat(3,12.5vh);grid-template-rows:repeat(3,12.5vh)}
+body[data-dswap] #dpad button{font-size:4vh}
+/* SLOT SECUNDARIO (menor, diagonal p/ o centro): d-pad por padrao; analogico se dswap */
+body:not([data-dswap]) #dpad, body[data-dswap] #ls{left:20vw;bottom:24vh}
+body:not([data-dswap]) #dpad{grid-template-columns:repeat(3,8.5vh);grid-template-rows:repeat(3,8.5vh)}
+body:not([data-dswap]) #dpad button{font-size:3vh}
+body[data-dswap] #ls{width:30vh;height:30vh;max-width:210px;max-height:210px}
+/* 2o analogico: centro-direita, diagonal a partir dos botoes */
+#rs{right:28vw;bottom:24vh;width:27vh;height:27vh;max-width:195px;max-height:195px}
+/* botoes de acao: canto inferior direito (polegar dir) */
+#face{right:4vw;bottom:6vh;display:grid;grid-template-columns:repeat(3,14vh);grid-template-rows:repeat(3,14vh);gap:1.3vh}
+#face button{border-radius:50%;font-size:4.2vh;background:#333a47}
 #face button[data-b=a]{background:#3d5a3d}#face button[data-b=b]{background:#5a3d3d}
-/* d-pad: superior esquerdo (secundario), maior */
-#dpad{position:absolute;left:5vw;top:13vh;display:grid;grid-template-columns:repeat(3,10.5vh);grid-template-rows:repeat(3,10.5vh);gap:.7vh}
-#dpad button{font-size:3.4vh;border-radius:1.6vh;opacity:.9}
 #tl{left:2vw;top:2vh;display:flex;flex-direction:column;gap:1.1vh}
 #tr{right:13vw;top:2vh;display:flex;flex-direction:column;gap:1.1vh}
 .trig{width:18vh;height:8.5vh;font-size:2.7vh;border-radius:2.2vh}
@@ -647,6 +656,9 @@ body[data-mode=media] #miniplayer,body[data-inpad=1] #miniplayer{display:none!im
 #mid{left:50%;top:3vh;transform:translateX(-50%);display:flex;gap:1.4vh;align-items:center}
 #mid button[data-b]{width:16vh;height:6vh;font-size:2vh;border-radius:3vh}
 #tomenu{width:6vh;height:6vh;font-size:3vh;border-radius:50%;background:#3a4150!important;opacity:.75}
+#swapd{position:absolute;left:50%;bottom:3vh;transform:translateX(-50%);width:11vh;height:6vh;
+  border-radius:3vh;font-size:2.8vh;opacity:.6;z-index:4}
+body[data-mode=media] #swapd{display:none}
 #pnum{font-size:2.2vh;font-weight:800;padding:0 1.5vh;opacity:.5}
 #pad button{border:0;color:#e6e6e6;font:inherit;font-weight:700;background:#2b303c}
 #pad button:active,#pad button.on{background:#4f8cff;color:#fff}
@@ -836,6 +848,7 @@ body[data-p="2"] #pnum{color:var(--p2)}
   <div class="p" id=face><div></div><button data-b=y>Y</button><div></div><button data-b=x>X</button><div></div><button data-b=a>A</button><div></div><button data-b=b>B</button><div></div></div>
   <div class="p" id=ls><div class=knob id=lk></div><span class=lbl>ANALÓGICO</span></div>
   <div class="p" id=rs><div class=knob id=rk></div><span class=lbl>C</span></div>
+  <button id=swapd title="trocar d-pad / analógico">⇄</button>
 
   <div id=mediactl>
     <button id=mc-back class=mc-corner onclick="showTab('games')">☰</button>
@@ -1192,6 +1205,9 @@ const FACE=new Set(['a','b','x','y']);
 let turbo=false;
 const tb=document.getElementById('turbo');
 tb.addEventListener('click',()=>{turbo=!turbo;tb.classList.toggle('on',turbo);buzz(turbo?25:12);});
+
+// trocar d-pad <-> analogico principal (slot primario)
+document.getElementById('swapd').addEventListener('click',()=>{document.body.toggleAttribute('data-dswap');buzz(18);});
 
 // botoes (menos o d-pad, que tem controlador de posicao pra diagonais)
 for(const el of document.querySelectorAll('#pad button[data-b]')){
