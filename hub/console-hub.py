@@ -235,6 +235,88 @@ def _mkpad():
 PADS = {1: _mkpad(), 2: _mkpad()}
 
 
+# --- mouse + teclado virtuais (usar o celular como mouse/teclado do PC) ---
+def _mkdev(caps, name, product):
+    try:
+        return UInput(caps, name=name, vendor=0x1234, product=product, version=1)
+    except Exception as ex:
+        print(f"[warn] uinput '{name}' off ({ex})")
+        return None
+
+
+MOUSE = _mkdev({e.EV_REL: [e.REL_X, e.REL_Y, e.REL_WHEEL, e.REL_HWHEEL],
+               e.EV_KEY: [e.BTN_LEFT, e.BTN_RIGHT, e.BTN_MIDDLE]},
+              "Homelab Virtual Mouse", 0x5679)
+
+_KBNAMES = (["KEY_" + c for c in "ABCDEFGHIJKLMNOPQRSTUVWXYZ"]
+            + ["KEY_" + d for d in "0123456789"]
+            + ["KEY_SPACE", "KEY_ENTER", "KEY_BACKSPACE", "KEY_TAB", "KEY_ESC",
+               "KEY_LEFTSHIFT", "KEY_LEFTCTRL", "KEY_LEFTALT", "KEY_LEFTMETA",
+               "KEY_UP", "KEY_DOWN", "KEY_LEFT", "KEY_RIGHT", "KEY_HOME", "KEY_END",
+               "KEY_PAGEUP", "KEY_PAGEDOWN", "KEY_DELETE",
+               "KEY_MINUS", "KEY_EQUAL", "KEY_LEFTBRACE", "KEY_RIGHTBRACE",
+               "KEY_BACKSLASH", "KEY_SEMICOLON", "KEY_APOSTROPHE", "KEY_GRAVE",
+               "KEY_COMMA", "KEY_DOT", "KEY_SLASH"])
+KBD = _mkdev({e.EV_KEY: [getattr(e, k) for k in _KBNAMES if hasattr(e, k)]},
+             "Homelab Virtual Keyboard", 0x567a)
+
+# char -> (KEY_code, precisa_shift) — layout US (o que a maioria dos teclados manda)
+def _charmap():
+    m = {}
+    for c in "abcdefghijklmnopqrstuvwxyz":
+        code = getattr(e, "KEY_" + c.upper())
+        m[c] = (code, False); m[c.upper()] = (code, True)
+    for d in "0123456789":
+        m[d] = (getattr(e, "KEY_" + d), False)
+    sym = {" ": ("SPACE", 0), "-": ("MINUS", 0), "_": ("MINUS", 1),
+           "=": ("EQUAL", 0), "+": ("EQUAL", 1), "[": ("LEFTBRACE", 0), "{": ("LEFTBRACE", 1),
+           "]": ("RIGHTBRACE", 0), "}": ("RIGHTBRACE", 1), "\\": ("BACKSLASH", 0), "|": ("BACKSLASH", 1),
+           ";": ("SEMICOLON", 0), ":": ("SEMICOLON", 1), "'": ("APOSTROPHE", 0), '"': ("APOSTROPHE", 1),
+           "`": ("GRAVE", 0), "~": ("GRAVE", 1), ",": ("COMMA", 0), "<": ("COMMA", 1),
+           ".": ("DOT", 0), ">": ("DOT", 1), "/": ("SLASH", 0), "?": ("SLASH", 1),
+           "!": ("1", 1), "@": ("2", 1), "#": ("3", 1), "$": ("4", 1), "%": ("5", 1),
+           "^": ("6", 1), "&": ("7", 1), "*": ("8", 1), "(": ("9", 1), ")": ("0", 1)}
+    for ch, (nm, sh) in sym.items():
+        code = getattr(e, "KEY_" + nm, None)
+        if code is not None:
+            m[ch] = (code, bool(sh))
+    return m
+
+
+CHARMAP = _charmap()
+NAMEDKEYS = {"enter": "KEY_ENTER", "backspace": "KEY_BACKSPACE", "tab": "KEY_TAB",
+             "esc": "KEY_ESC", "up": "KEY_UP", "down": "KEY_DOWN", "left": "KEY_LEFT",
+             "right": "KEY_RIGHT", "space": "KEY_SPACE", "delete": "KEY_DELETE",
+             "home": "KEY_HOME", "end": "KEY_END", "pageup": "KEY_PAGEUP", "pagedown": "KEY_PAGEDOWN"}
+MODKEYS = {"shift": e.KEY_LEFTSHIFT, "ctrl": e.KEY_LEFTCTRL, "alt": e.KEY_LEFTALT, "super": e.KEY_LEFTMETA}
+
+
+def kbd_send(d):
+    """Injeta no teclado virtual. d: {char} | {key,state?} | {mods:[...]} combinaveis."""
+    if not KBD:
+        return
+    mods = [MODKEYS[m] for m in d.get("mods", []) if m in MODKEYS]
+    for k in mods:
+        KBD.write(e.EV_KEY, k, 1)
+    if d.get("char") in CHARMAP:
+        code, sh = CHARMAP[d["char"]]
+        if sh:
+            KBD.write(e.EV_KEY, e.KEY_LEFTSHIFT, 1)
+        KBD.write(e.EV_KEY, code, 1); KBD.syn(); KBD.write(e.EV_KEY, code, 0)
+        if sh:
+            KBD.write(e.EV_KEY, e.KEY_LEFTSHIFT, 0)
+    elif d.get("key") in NAMEDKEYS:
+        k = getattr(e, NAMEDKEYS[d["key"]])
+        st = d.get("state")
+        if st is None:                       # tap
+            KBD.write(e.EV_KEY, k, 1); KBD.syn(); KBD.write(e.EV_KEY, k, 0)
+        else:                                # segurar/soltar
+            KBD.write(e.EV_KEY, k, 1 if st else 0)
+    for k in reversed(mods):
+        KBD.write(e.EV_KEY, k, 0)
+    KBD.syn()
+
+
 # --- helpers de lancamento ---
 def swaysock():
     out = subprocess.run(["pgrep", "-x", "sway"], capture_output=True, text=True).stdout.split()
@@ -802,6 +884,18 @@ body[data-p="2"] #pnum{color:var(--p2)}
 .lbl,#pnum{color:var(--tx-2)}
 /* apps */
 .app{background:var(--surface)!important;border:1px solid var(--border)!important;color:var(--tx)}
+/* desktop: mouse + teclado */
+#tpad{margin:6px 14px 12px;height:42vh;background:var(--surface);border:1px solid var(--border);
+  border-radius:14px;display:flex;flex-direction:column;align-items:center;justify-content:center;
+  gap:6px;color:var(--tx-3);font-size:15px;text-align:center;padding:0 20px;touch-action:none;user-select:none}
+#tpad small{font-size:11px;opacity:.7;line-height:1.4}
+#deskbtns{display:flex;gap:10px;padding:0 14px 6px}
+#deskbtns button{flex:1;padding:15px 8px;background:var(--ui);color:var(--tx);border:0;border-radius:10px;font:inherit;font-weight:600}
+#deskbtns button:active{background:var(--accent);color:#fff}
+#deskkeys{display:flex;flex-wrap:wrap;gap:8px;padding:6px 14px 24px}
+#deskkeys button{background:var(--ui);color:var(--tx);border:0;border-radius:8px;padding:11px 15px;font:inherit;font-weight:600;min-width:46px}
+#deskkeys button:active,#deskkeys button.on{background:var(--accent);color:#fff}
+#kbin{position:fixed;bottom:-40px;left:0;width:1px;height:1px;opacity:0;border:0}
 </style></head><body>
 
 <div id=app>
@@ -830,6 +924,25 @@ body[data-p="2"] #pnum{color:var(--p2)}
 
   <div class="view" id=v-apps>
     <div id=apps></div>
+  </div>
+
+  <div class="view" id=v-desk>
+    <div class=sec>Mouse</div>
+    <div id=tpad>trackpad<br><small>arraste = move · toque = clique · 2 dedos = rolar · 2 dedos toque = botão direito</small></div>
+    <div id=deskbtns>
+      <button data-clk=left>Clique esq.</button>
+      <button data-clk=mid>Meio</button>
+      <button data-clk=right>Clique dir.</button>
+    </div>
+    <div class=sec>Teclado</div>
+    <div id=deskkeys>
+      <button id=kbtoggle>⌨ Digitar</button>
+      <button data-key=esc>Esc</button><button data-key=tab>Tab</button>
+      <button data-mod=ctrl>Ctrl</button><button data-mod=alt>Alt</button><button data-mod=super>Super</button>
+      <button data-key=left>←</button><button data-key=up>↑</button><button data-key=down>↓</button><button data-key=right>→</button>
+      <button data-key=backspace>⌫</button><button data-key=enter>⏎</button>
+    </div>
+    <input id=kbin autocomplete=off autocapitalize=off autocorrect=off spellcheck=false>
   </div>
 </div>
 
@@ -899,6 +1012,7 @@ body[data-p="2"] #pnum{color:var(--p2)}
   <button data-tab=series><span class=i>📺</span>Séries</button>
   <button data-tab=music><span class=i>🎵</span>Música</button>
   <button data-tab=apps><span class=i>⚙️</span>Apps</button>
+  <button data-tab=desk><span class=i>⌨️</span>PC</button>
   <button data-tab=pad><span class=i>🎮</span>Controle</button>
 </div>
 
@@ -913,7 +1027,7 @@ const P = new URLSearchParams(location.search).get('p') === '2' ? 2 : 1;
 document.body.dataset.p = P;
 
 // ---------- navegacao de abas ----------
-const TABS=['games','movies','series','music','apps'];
+const TABS=['games','movies','series','music','apps','desk'];
 const views={};
 for(const t of TABS) views[t]=document.getElementById('v-'+t);
 views.pad=document.getElementById('pad');
@@ -1270,6 +1384,46 @@ function goFullscreen(){
 window.addEventListener('touchend', goFullscreen, {passive:true});
 window.addEventListener('click', goFullscreen);
 
+// ---------- desktop: usar o celular como mouse + teclado do PC ----------
+(function(){
+  const tpad=document.getElementById('tpad'); if(!tpad) return;
+  const ptr=o=>fetch('/ptr',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(o),keepalive:true}).catch(()=>{});
+  const key=o=>fetch('/key',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(o),keepalive:true}).catch(()=>{});
+  const mods={ctrl:false,alt:false,super:false};
+  const activeMods=()=>Object.keys(mods).filter(k=>mods[k]);
+  const clearMods=()=>{for(const k in mods)mods[k]=false;
+    for(const b of document.querySelectorAll('#deskkeys button[data-mod]'))b.classList.remove('on');};
+  // --- trackpad ---
+  let lx=0,ly=0,moved=false,t0=0,startFingers=1,lsy=0;
+  tpad.addEventListener('touchstart',ev=>{ev.preventDefault();startFingers=ev.touches.length;
+    const t=ev.touches[0];lx=t.clientX;ly=t.clientY;lsy=t.clientY;moved=false;t0=Date.now();},{passive:false});
+  tpad.addEventListener('touchmove',ev=>{ev.preventDefault();const t=ev.touches[0];
+    if(ev.touches.length>=2){const dy=t.clientY-lsy;if(Math.abs(dy)>7){ptr({scroll:dy>0?-1:1});lsy=t.clientY;moved=true;}return;}
+    const dx=t.clientX-lx,dy=t.clientY-ly;
+    if(Math.abs(dx)>1||Math.abs(dy)>1){moved=true;ptr({dx:Math.round(dx*1.7),dy:Math.round(dy*1.7)});lx=t.clientX;ly=t.clientY;}},{passive:false});
+  tpad.addEventListener('touchend',ev=>{ev.preventDefault();
+    if(!moved&&Date.now()-t0<220){const c=startFingers>=2?'right':'left';buzz(10);ptr({click:c,state:1});setTimeout(()=>ptr({click:c,state:0}),25);}},{passive:false});
+  // --- botoes de clique ---
+  for(const b of document.querySelectorAll('#deskbtns button[data-clk]')){const c=b.dataset.clk;
+    b.onclick=()=>{buzz();ptr({click:c,state:1});setTimeout(()=>ptr({click:c,state:0}),25);};}
+  // --- teclado nativo do celular ---
+  const kbin=document.getElementById('kbin');
+  document.getElementById('kbtoggle').onclick=()=>{kbin.focus();};
+  tpad.addEventListener('dblclick',()=>kbin.focus());
+  kbin.addEventListener('beforeinput',ev=>{
+    if(ev.inputType==='insertText'&&ev.data){for(const ch of ev.data)key({char:ch,mods:activeMods()});clearMods();}
+    else if(ev.inputType==='deleteContentBackward')key({key:'backspace'});
+    else if(ev.inputType==='insertLineBreak'||ev.inputType==='insertParagraph')key({key:'enter'});
+    kbin.value='';});
+  kbin.addEventListener('keydown',ev=>{const m={Enter:'enter',Backspace:'backspace',Tab:'tab',Escape:'esc',ArrowUp:'up',ArrowDown:'down',ArrowLeft:'left',ArrowRight:'right'};
+    if(m[ev.key]){ev.preventDefault();key({key:m[ev.key],mods:activeMods()});clearMods();}});
+  // --- teclas especiais + modificadores ---
+  for(const b of document.querySelectorAll('#deskkeys button[data-key]')){const k=b.dataset.key;
+    b.onclick=()=>{buzz();key({key:k,mods:activeMods()});clearMods();};}
+  for(const b of document.querySelectorAll('#deskkeys button[data-mod]')){const mo=b.dataset.mod;
+    b.onclick=()=>{mods[mo]=!mods[mo];b.classList.toggle('on',mods[mo]);buzz();};}
+})();
+
 loadGames(); loadApps(); refreshStatus(); loadDownloads();
 setInterval(refreshStatus, 2000);
 setInterval(loadDownloads, 8000);
@@ -1540,6 +1694,31 @@ class Handler(BaseHTTPRequestHandler):
                 else:
                     ui.write(e.EV_KEY, BUTTONS[d["btn"]], 1 if d["state"] else 0)
                 ui.syn()
+                self.send_response(204); self.end_headers()
+            except Exception:
+                self.send_response(400); self.end_headers()
+
+        elif path == "/ptr":
+            try:
+                if MOUSE:
+                    if "dx" in d or "dy" in d:
+                        MOUSE.write(e.EV_REL, e.REL_X, int(d.get("dx", 0)))
+                        MOUSE.write(e.EV_REL, e.REL_Y, int(d.get("dy", 0)))
+                    if d.get("scroll"):
+                        MOUSE.write(e.EV_REL, e.REL_WHEEL, int(d["scroll"]))
+                    if "click" in d:
+                        btn = {"left": e.BTN_LEFT, "right": e.BTN_RIGHT,
+                               "mid": e.BTN_MIDDLE}.get(d["click"])
+                        if btn is not None:
+                            MOUSE.write(e.EV_KEY, btn, 1 if d.get("state", 1) else 0)
+                    MOUSE.syn()
+                self.send_response(204); self.end_headers()
+            except Exception:
+                self.send_response(400); self.end_headers()
+
+        elif path == "/key":
+            try:
+                kbd_send(d)
                 self.send_response(204); self.end_headers()
             except Exception:
                 self.send_response(400); self.end_headers()
