@@ -480,7 +480,24 @@ PAGE = r"""<!doctype html><html><head><meta charset=utf-8>
 <meta name=apple-mobile-web-app-status-bar-style content=black-translucent>
 <meta name=apple-mobile-web-app-title content=Homelab>
 <link rel=apple-touch-icon href=/icon.png>
+<link rel=preconnect href=https://fonts.googleapis.com>
+<link rel=preconnect href=https://fonts.gstatic.com crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=EB+Garamond:ital,wght@0,500;0,600;1,500&display=swap" rel=stylesheet>
 <style>
+/* ===== paleta Yerba Mate — Tererê (dia) / Cimarrão (noite), igual ao site ===== */
+:root{
+  --bg:#fbf1c7; --bg2:#f0e4b8; --surface:#ebdfb0; --ui:#ddd2a0; --ui-2:#cbbe8a;
+  --tx:#3c3836; --tx-2:#504945; --tx-3:#7c6f64;
+  --accent:#b8420f; --accent-2:#79740e; --p2:#9d0006;
+  --border:#00000018; --bar:#fbf1c7d8; --overlay:#fbf1c7f2; --nm-grad:#f0e4b8ee;
+  --serif:'EB Garamond',Georgia,serif;
+}
+:root[data-theme=dark]{
+  --bg:#282d1c; --bg2:#2f3521; --surface:#363c26; --ui:#4f5b4a; --ui-2:#5a6a54;
+  --tx:#dce0d9; --tx-2:#a8b09f; --tx-3:#7a8573;
+  --accent:#e07050; --accent-2:#7a9e38; --p2:#c25d44;
+  --border:#ffffff16; --bar:#282d1cd8; --overlay:#282d1cf2; --nm-grad:#1d2114ee;
+}
 *{box-sizing:border-box;-webkit-user-select:none;user-select:none;
   -webkit-touch-callout:none;-webkit-tap-highlight-color:transparent;margin:0}
 html,body{height:100%;color:#eef1f6;overflow:hidden;
@@ -721,6 +738,35 @@ body[data-inpad="1"] #tvbtn{display:block}
   background:#4f8cff;border-radius:0 0 3px 3px}
 #tabs button .i{transition:transform .15s}
 #tabs button.on .i{transform:translateY(-1px) scale(1.08)}
+
+/* ===================== TEMA YERBA MATE (re-skin) ===================== */
+html,body{background:var(--bg)!important;background-image:none!important;color:var(--tx)!important}
+.sec{color:var(--accent);font-family:var(--serif);font-weight:700;text-transform:none;
+  letter-spacing:.01em;font-size:16px}
+#tabs{background:var(--bar);border-top:1px solid var(--border)}
+#tabs button{color:var(--tx-3)}
+#tabs button.on{color:var(--accent)}
+#tabs button.on::before{background:var(--accent)}
+.card,.poster,.rcard{background:var(--surface);border:1px solid var(--border);border-radius:10px}
+.card:active,.poster:active{border-color:var(--accent);box-shadow:0 1px 6px #0002}
+.card .cov,.rcard .rc,.poster .pc{background-color:var(--ui);color:var(--tx-3)}
+.card .nm,.rcard .rn{background:linear-gradient(transparent,var(--nm-grad) 55%);color:var(--tx)}
+.card .sys,.rcard .rt{background:var(--accent);color:#fff}
+.searchbar{background:var(--bg);border-bottom:1px solid var(--border)}
+.searchbar input{background:var(--surface);border:1px solid var(--border);color:var(--tx)}
+.searchbar input:focus{border-color:var(--accent)}
+.searchbar button,#mediactl button,.mc-corner,#tvbtn{background:var(--ui)!important;color:var(--tx)!important}
+#mediactl button:active,.searchbar button:active{background:var(--accent)!important;color:#fff!important}
+#mc-pp{background:var(--accent)!important;color:#fff}
+#mc-title{font-family:var(--serif)}
+#mc-bar,.dl .bar{background:var(--ui)}
+#mc-fill{background:var(--accent)}
+#miniplayer{background:var(--surface);border-top:1px solid var(--border);color:var(--tx)}
+#dlbtn{background:var(--surface);border:1px solid var(--border);color:var(--tx)}
+#dlbadge{background:var(--accent);color:#fff}
+#dllist,#eplist{background:var(--overlay)}
+#np-bg{filter:blur(38px) brightness(.5) saturate(1.15)}
+body[data-p="2"] #pnum{color:var(--p2)}
 </style></head><body>
 
 <div id=app>
@@ -821,6 +867,12 @@ body[data-inpad="1"] #tvbtn{display:block}
 </div>
 
 <script>
+// tema Yerba Mate: Tererê (6h-18h) / Cimarrão (18h-6h), igual ao site pessoal
+(function(){var forced=new URLSearchParams(location.search).get('theme');
+  function t(){if(forced){document.documentElement.dataset.theme=forced;return;}
+    var h=new Date().getHours();
+    document.documentElement.dataset.theme=(h>=6&&h<18)?'light':'dark';}
+  t();setInterval(t,600000);})();
 const P = new URLSearchParams(location.search).get('p') === '2' ? 2 : 1;
 document.body.dataset.p = P;
 
