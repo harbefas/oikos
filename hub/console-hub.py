@@ -1471,6 +1471,14 @@ window.addEventListener('click', goFullscreen);
     b.onclick=()=>{mods[mo]=!mods[mo];b.classList.toggle('on',mods[mo]);buzz();};}
 })();
 
+// teclado nativo aberto -> encolhe a area do app pra acima do teclado (trackpad sobe)
+if(window.visualViewport){
+  const vv=window.visualViewport, app=document.getElementById('app');
+  const onVV=()=>{const kb=Math.max(0, window.innerHeight - vv.height - vv.offsetTop);
+    app.style.bottom = kb>90 ? kb+'px' : '';};
+  vv.addEventListener('resize',onVV); vv.addEventListener('scroll',onVV);
+}
+
 loadGames(); loadApps(); refreshStatus(); loadDownloads();
 setInterval(refreshStatus, 2000);
 setInterval(loadDownloads, 8000);
