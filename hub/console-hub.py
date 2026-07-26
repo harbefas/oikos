@@ -634,16 +634,16 @@ body[data-mode=media] #miniplayer,body[data-inpad=1] #miniplayer{display:none!im
 #dpad button{border-radius:1.6vh;opacity:.9}
 /* SLOT PRIMARIO (grande, canto inf esquerdo): analogico por padrao; d-pad se data-dswap */
 body:not([data-dswap]) #ls, body[data-dswap] #dpad{left:3vw;bottom:4vh}
-body:not([data-dswap]) #ls{width:47vh;height:47vh;max-width:340px;max-height:340px}
-body[data-dswap] #dpad{grid-template-columns:repeat(3,12.5vh);grid-template-rows:repeat(3,12.5vh)}
-body[data-dswap] #dpad button{font-size:4vh}
-/* SLOT SECUNDARIO (menor, diagonal p/ o centro): d-pad por padrao; analogico se dswap */
-body:not([data-dswap]) #dpad, body[data-dswap] #ls{left:20vw;bottom:24vh}
+body:not([data-dswap]) #ls{width:44vh;height:44vh;max-width:320px;max-height:320px}
+body[data-dswap] #dpad{grid-template-columns:repeat(3,12vh);grid-template-rows:repeat(3,12vh)}
+body[data-dswap] #dpad button{font-size:3.8vh}
+/* SLOT SECUNDARIO (menor, diagonal p/ o centro, acima dos de baixo): d-pad por padrao; analogico se dswap */
+body:not([data-dswap]) #dpad, body[data-dswap] #ls{left:20vw;bottom:50vh}
 body:not([data-dswap]) #dpad{grid-template-columns:repeat(3,8.5vh);grid-template-rows:repeat(3,8.5vh)}
 body:not([data-dswap]) #dpad button{font-size:3vh}
 body[data-dswap] #ls{width:30vh;height:30vh;max-width:210px;max-height:210px}
 /* 2o analogico: centro-direita, diagonal a partir dos botoes */
-#rs{right:28vw;bottom:24vh;width:27vh;height:27vh;max-width:195px;max-height:195px}
+#rs{right:28vw;bottom:50vh;width:27vh;height:27vh;max-width:195px;max-height:195px}
 /* botoes de acao: canto inferior direito (polegar dir) */
 #face{right:4vw;bottom:6vh;display:grid;grid-template-columns:repeat(3,14vh);grid-template-rows:repeat(3,14vh);gap:1.3vh}
 #face button{border-radius:50%;font-size:4.2vh;background:#333a47}
