@@ -892,8 +892,8 @@ body[data-p="2"] #pnum{color:var(--p2)}
 /* apps */
 .app{background:var(--surface)!important;border:1px solid var(--border)!important;color:var(--tx)}
 /* desktop: mouse + teclado */
-/* aba PC: coluna que preenche a tela (sem scroll da pagina) */
-#v-desk{display:flex;flex-direction:column;height:100%}
+/* aba PC: coluna que preenche a tela (sem scroll da pagina); so quando ativa */
+#v-desk.on{display:flex;flex-direction:column;height:100%}
 #deskscreen{display:none;flex:0 0 auto;margin:8px 14px 4px;border-radius:12px;overflow:hidden;
   background:#000;border:1px solid var(--border);aspect-ratio:16/9;align-items:center;justify-content:center}
 body[data-screen] #deskscreen{display:flex}
@@ -957,7 +957,7 @@ body[data-screen] #deskkeys{flex:0 0 auto;padding-top:8px}   /* com a tela ligad
     <div id=padrow>
       <div id=tpad>trackpad<br><small>arraste move · toque clica · 2 dedos rolar</small></div>
     </div>
-    <input id=kbin autocomplete=off autocapitalize=off autocorrect=off spellcheck=false>
+    <div id=kbin contenteditable=true inputmode=text autocapitalize=off autocorrect=off spellcheck=false></div>
   </div>
 </div>
 
@@ -1454,7 +1454,7 @@ window.addEventListener('click', goFullscreen);
     if(ev.inputType==='insertText'&&ev.data){for(const ch of ev.data)key({char:ch,mods:activeMods()});clearMods();}
     else if(ev.inputType==='deleteContentBackward')key({key:'backspace'});
     else if(ev.inputType==='insertLineBreak'||ev.inputType==='insertParagraph')key({key:'enter'});
-    kbin.value='';});
+    ev.preventDefault();kbin.textContent='';});
   kbin.addEventListener('keydown',ev=>{const m={Enter:'enter',Backspace:'backspace',Tab:'tab',Escape:'esc',ArrowUp:'up',ArrowDown:'down',ArrowLeft:'left',ArrowRight:'right'};
     if(m[ev.key]){ev.preventDefault();key({key:m[ev.key],mods:activeMods()});clearMods();}});
   // --- teclas especiais + modificadores ---
