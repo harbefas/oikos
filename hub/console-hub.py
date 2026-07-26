@@ -773,7 +773,7 @@ body[data-inpad="1"] #tabgrip{display:none}
 #mp-pp{background:#4f8cff;border:0;color:#fff;width:40px;height:40px;border-radius:50%;font-size:17px;flex:none}
 #mp-stop{background:#2b303c;border:0;color:#e8e8e8;width:36px;height:36px;border-radius:50%;font-size:14px;flex:none}
 /* no modo controle (pad) o mini-player some (ja tem o painel completo) */
-body[data-mode=media] #miniplayer,body[data-inpad=1] #miniplayer{display:none!important}
+body[data-mode=media] #miniplayer,body[data-inpad="1"] #miniplayer{display:none!important}
 /* controle: reaproveita o gamepad; escondido ate a aba */
 #pad{position:fixed;inset:0;background:#111318;display:none}
 #pad.on{display:block}
