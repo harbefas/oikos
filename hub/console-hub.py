@@ -482,20 +482,20 @@ PAGE = r"""<!doctype html><html><head><meta charset=utf-8>
 <link rel=apple-touch-icon href=/icon.png>
 <link rel=preconnect href=https://fonts.googleapis.com>
 <link rel=preconnect href=https://fonts.gstatic.com crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=EB+Garamond:ital,wght@0,500;0,600;1,500&display=swap" rel=stylesheet>
+<link href="https://fonts.googleapis.com/css2?family=EB+Garamond:ital,wght@0,500;0,600;1,500&family=Inter:wght@400;500;600;700&display=swap" rel=stylesheet>
 <style>
 /* ===== paleta Yerba Mate — Tererê (dia) / Cimarrão (noite), igual ao site ===== */
 :root{
   --bg:#fbf1c7; --bg2:#f0e4b8; --surface:#ebdfb0; --ui:#ddd2a0; --ui-2:#cbbe8a;
   --tx:#3c3836; --tx-2:#504945; --tx-3:#7c6f64;
-  --accent:#b8420f; --accent-2:#79740e; --p2:#9d0006;
+  --accent:#c88010; --accent-2:#79740e; --p2:#9d0006;
   --border:#00000018; --bar:#fbf1c7d8; --overlay:#fbf1c7f2; --nm-grad:#f0e4b8ee;
-  --serif:'EB Garamond',Georgia,serif;
+  --serif:'EB Garamond',Georgia,serif; --sans:'Inter',system-ui,sans-serif;
 }
 :root[data-theme=dark]{
   --bg:#282d1c; --bg2:#2f3521; --surface:#363c26; --ui:#4f5b4a; --ui-2:#5a6a54;
   --tx:#dce0d9; --tx-2:#a8b09f; --tx-3:#7a8573;
-  --accent:#e07050; --accent-2:#7a9e38; --p2:#c25d44;
+  --accent:#d4a033; --accent-2:#7a9e38; --p2:#c25d44;
   --border:#ffffff16; --bar:#282d1cd8; --overlay:#282d1cf2; --nm-grad:#1d2114ee;
 }
 *{box-sizing:border-box;-webkit-user-select:none;user-select:none;
@@ -740,7 +740,8 @@ body[data-inpad="1"] #tvbtn{display:block}
 #tabs button.on .i{transform:translateY(-1px) scale(1.08)}
 
 /* ===================== TEMA YERBA MATE (re-skin) ===================== */
-html,body{background:var(--bg)!important;background-image:none!important;color:var(--tx)!important}
+html,body{background:var(--bg)!important;background-image:none!important;color:var(--tx)!important;
+  font-family:var(--sans)}
 .sec{color:var(--accent);font-family:var(--serif);font-weight:700;text-transform:none;
   letter-spacing:.01em;font-size:16px}
 #tabs{background:var(--bar);border-top:1px solid var(--border)}
