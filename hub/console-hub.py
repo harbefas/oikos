@@ -899,6 +899,16 @@ body[data-p="2"] #pnum{color:var(--p2)}
 /* desktop: mouse + teclado */
 /* aba PC: coluna que preenche a tela (sem scroll da pagina); so quando ativa */
 #v-desk.on{display:flex;flex-direction:column;height:100%}
+#deskmain{flex:1;min-height:0;display:flex;flex-direction:column}
+/* landscape (deitado): botoes a ESQUERDA, trackpad a DIREITA (dois polegares).
+   portrait (vertical) fica no padrao: teclado em cima, trackpad embaixo. */
+@media (orientation:landscape){
+  #deskmain{flex-direction:row}
+  #deskmain #deskkeys{flex:0 0 42%;align-content:center;justify-content:center;gap:7px;
+    padding:10px 8px;overflow-y:auto;-webkit-overflow-scrolling:touch}
+  #deskmain #padrow{flex:1 1 auto;padding:10px 14px 14px 6px}
+  #tpad{max-height:none}
+}
 #deskscreen{display:none;flex:0 0 auto;margin:8px 14px 4px;border-radius:12px;overflow:hidden;
   background:#000;border:1px solid var(--border);aspect-ratio:16/9;align-items:center;justify-content:center}
 body[data-screen] #deskscreen{display:flex}
@@ -949,18 +959,20 @@ body[data-screen] #deskkeys{flex:0 0 auto;padding-top:8px}   /* com a tela ligad
 
   <div class="view" id=v-desk>
     <div id=deskscreen><img id=deskimg alt="tela do PC"></div>
-    <div id=deskkeys>
-      <button id=kbtoggle>⌨ Digitar</button>
-      <button id=screentoggle>👁 Tela</button>
-      <button data-key=esc>Esc</button><button data-key=tab>Tab</button>
-      <button data-mod=ctrl>Ctrl</button><button data-mod=alt>Alt</button><button data-mod=super>Super</button>
-      <button data-key=left>←</button><button data-key=up>↑</button><button data-key=down>↓</button><button data-key=right>→</button>
-      <button data-key=backspace>⌫</button><button data-key=enter>⏎</button>
-      <button data-char="1">1</button><button data-char="2">2</button><button data-char="3">3</button>
-      <button id=btnsuperc>⊞ C</button>
-    </div>
-    <div id=padrow>
-      <div id=tpad>trackpad<br><small>arraste move · toque clica · 2 dedos rolar</small></div>
+    <div id=deskmain>
+      <div id=deskkeys>
+        <button id=kbtoggle>⌨ Digitar</button>
+        <button id=screentoggle>👁 Tela</button>
+        <button data-key=esc>Esc</button><button data-key=tab>Tab</button>
+        <button data-mod=ctrl>Ctrl</button><button data-mod=alt>Alt</button><button data-mod=super>Super</button>
+        <button data-key=left>←</button><button data-key=up>↑</button><button data-key=down>↓</button><button data-key=right>→</button>
+        <button data-key=backspace>⌫</button><button data-key=enter>⏎</button>
+        <button data-char="1">1</button><button data-char="2">2</button><button data-char="3">3</button>
+        <button id=btnsuperc>⊞ C</button>
+      </div>
+      <div id=padrow>
+        <div id=tpad>trackpad<br><small>arraste move · toque clica · 2 dedos rolar</small></div>
+      </div>
     </div>
     <div id=kbin contenteditable=true inputmode=text autocapitalize=off autocorrect=off spellcheck=false></div>
   </div>
@@ -1060,8 +1072,8 @@ function showTab(t){
   document.getElementById('app').style.display = pad ? 'none' : 'block';
   for(const k of TABS) views[k].classList.toggle('on', k===t);
   views.pad.classList.toggle('on', pad);
-  if(pad){ hideTabs(); keepAwake(); refreshStatus(); }
-  else { showTabs(); }   // revela a barra por alguns segundos ao trocar de aba
+  if(pad){ hideTabs(); keepAwake(); refreshStatus(); lockLandscape(); }
+  else { showTabs(); unlockOrient(); }   // gamepad = sempre landscape; resto solta a orientacao
   if(t==='movies' && !loaded.movies){ loaded.movies=1; loadMovies(); }
   if(t==='series' && !loaded.series){ loaded.series=1; loadSeries(); }
   if(t==='music'  && !loaded.music ){ loaded.music =1; loadMusic();  }
@@ -1413,6 +1425,9 @@ stick(document.getElementById('rs'),document.getElementById('rk'),2);
 
 let lock=null;
 async function keepAwake(){try{if('wakeLock' in navigator)lock=await navigator.wakeLock.request('screen');}catch(_){}}
+// gamepad sempre deitado: tenta travar em landscape (Android/fullscreen; iOS ignora)
+async function lockLandscape(){try{await screen.orientation.lock('landscape');}catch(_){}}
+function unlockOrient(){try{screen.orientation.unlock();}catch(_){}}
 document.addEventListener('gesturestart',e=>e.preventDefault());
 document.addEventListener('dblclick',e=>e.preventDefault());
 
