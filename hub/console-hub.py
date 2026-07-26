@@ -768,6 +768,21 @@ html,body{background:var(--bg)!important;background-image:none!important;color:v
 #dllist,#eplist{background:var(--overlay)}
 #np-bg{filter:blur(38px) brightness(.5) saturate(1.15)}
 body[data-p="2"] #pnum{color:var(--p2)}
+/* gamepad */
+#pad{background:var(--bg)!important}
+#pad button{background:var(--ui)!important;color:var(--tx)!important}
+#pad button:active,#pad button.on{background:var(--accent)!important;color:#fff!important}
+#tomenu{background:var(--ui)!important}
+#face button[data-b=a]{background:var(--accent-2)!important}
+#face button[data-b=b]{background:var(--p2)!important}
+#pad button#bz{background:var(--accent-2)!important}
+#ls{background:radial-gradient(circle,var(--surface),var(--bg2))!important;border:2px solid var(--ui)!important}
+#rs{background:radial-gradient(circle,var(--surface),var(--bg2))!important;border:2px solid var(--ui)!important}
+#lk{background:var(--accent)!important}
+#rk{background:var(--accent-2)!important}
+.lbl,#pnum{color:var(--tx-2)}
+/* apps */
+.app{background:var(--surface)!important;border:1px solid var(--border)!important;color:var(--tx)}
 </style></head><body>
 
 <div id=app>
