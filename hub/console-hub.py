@@ -891,6 +891,9 @@ body[data-p="2"] #pnum{color:var(--p2)}
   border-radius:14px;display:flex;flex-direction:column;align-items:center;justify-content:center;
   gap:6px;color:var(--tx-3);font-size:14px;text-align:center;padding:0 14px;touch-action:none;user-select:none}
 #tpad small{font-size:10.5px;opacity:.7;line-height:1.4}
+#deskscreen{margin:2px 14px 8px;border-radius:12px;overflow:hidden;background:#000;
+  border:1px solid var(--border);aspect-ratio:16/9;display:flex;align-items:center;justify-content:center}
+#deskimg{width:100%;height:100%;object-fit:contain;display:block}
 #deskbtns button{flex:1;padding:15px 8px;background:var(--ui);color:var(--tx);border:0;border-radius:10px;font:inherit;font-weight:600}
 #deskbtns button:active{background:var(--accent);color:#fff}
 #deskkeys{display:flex;flex-wrap:wrap;gap:8px;padding:6px 14px 24px}
@@ -928,6 +931,8 @@ body[data-p="2"] #pnum{color:var(--p2)}
   </div>
 
   <div class="view" id=v-desk>
+    <div class=sec>Tela</div>
+    <div id=deskscreen><img id=deskimg alt="tela do PC"></div>
     <div class=sec>Teclado</div>
     <div id=deskkeys>
       <button id=kbtoggle>⌨ Digitar</button>
@@ -1044,6 +1049,7 @@ function showTab(t){
   if(t==='movies' && !loaded.movies){ loaded.movies=1; loadMovies(); }
   if(t==='series' && !loaded.series){ loaded.series=1; loadSeries(); }
   if(t==='music'  && !loaded.music ){ loaded.music =1; loadMusic();  }
+  if(t==='desk') startDeskScreen(); else stopDeskScreen();
 }
 for(const b of document.querySelectorAll('#tabs button'))
   b.onclick=()=>showTab(b.dataset.tab);
@@ -1308,6 +1314,13 @@ function tvTick(){
 }
 function openTv(){ document.getElementById('tvview').classList.add('on'); tvTick(); tvTimer=setInterval(tvTick,2500); }
 function closeTv(){ document.getElementById('tvview').classList.remove('on'); clearInterval(tvTimer); tvTimer=null; }
+
+// tela ao vivo na aba PC (grim), atualiza enquanto a aba esta aberta
+let deskT=null;
+function deskTick(){const img=document.getElementById('deskimg');if(!img)return;
+  const u='/api/tv?'+Date.now();const pre=new Image();pre.onload=()=>{img.src=u;};pre.src=u;}
+function startDeskScreen(){deskTick();if(!deskT)deskT=setInterval(deskTick,1600);}
+function stopDeskScreen(){if(deskT){clearInterval(deskT);deskT=null;}}
 
 // ---------- gamepad (controle) ----------
 const post=o=>{o.p=P;return fetch('/p',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(o),keepalive:true}).catch(()=>{});};
