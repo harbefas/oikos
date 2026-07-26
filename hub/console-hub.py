@@ -587,13 +587,20 @@ html,body{height:100%;color:#eef1f6;overflow:hidden;
   background:#0c0e13;
   background-image:radial-gradient(1200px 600px at 80% -10%,#1a2740 0%,transparent 55%),
                    radial-gradient(900px 500px at -10% 110%,#241a33 0%,transparent 50%)}
-#app{position:fixed;inset:0 0 64px 0;overflow-y:auto;-webkit-overflow-scrolling:touch}
+#app{position:fixed;inset:0;overflow-y:auto;-webkit-overflow-scrolling:touch}
 .view{display:none;min-height:100%}
 .view.on{display:block}
 /* tab bar translucida (glass) */
-#tabs{position:fixed;bottom:0;left:0;right:0;height:64px;display:flex;
+#tabs{position:fixed;bottom:0;left:0;right:0;height:64px;display:flex;z-index:18;
   background:#12151cd8;backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);
-  border-top:1px solid #ffffff12;padding-bottom:env(safe-area-inset-bottom)}
+  border-top:1px solid #ffffff12;padding-bottom:env(safe-area-inset-bottom);
+  transform:translateY(calc(100% + 4px));transition:transform .28s cubic-bezier(.2,.7,.3,1)}
+#tabs.show{transform:translateY(0)}
+/* alca pra revelar a barra (some no modo Controle) */
+#tabgrip{position:fixed;bottom:0;left:0;right:0;height:26px;z-index:17;display:flex;
+  align-items:flex-end;justify-content:center;padding-bottom:6px}
+#tabgrip i{width:46px;height:5px;border-radius:3px;background:var(--ui-2);opacity:.65}
+body[data-inpad="1"] #tabgrip{display:none}
 #tabs button{flex:1;background:0;border:0;color:#7d8595;font:inherit;font-size:11px;font-weight:600;
   display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;letter-spacing:.02em}
 #tabs button .i{font-size:21px}
@@ -1023,6 +1030,7 @@ body[data-screen] #deskkeys{flex:0 0 auto;padding-top:8px}   /* com a tela ligad
   <button data-tab=desk><span class=i>⌨️</span>PC</button>
   <button data-tab=pad><span class=i>🎮</span>Controle</button>
 </div>
+<div id=tabgrip><i></i></div>
 
 <script>
 // tema Yerba Mate: Tererê (6h-18h) / Cimarrão (18h-6h), igual ao site pessoal
@@ -1045,11 +1053,10 @@ function showTab(t){
   const pad = t==='pad';
   document.body.dataset.inpad = pad ? '1' : '';
   document.getElementById('app').style.display = pad ? 'none' : 'block';
-  document.getElementById('tabs').style.display = pad ? 'none' : 'flex';  // controle = sem tab bar
-  document.getElementById('app').style.bottom = pad ? '0' : '62px';
   for(const k of TABS) views[k].classList.toggle('on', k===t);
   views.pad.classList.toggle('on', pad);
-  if(pad){ keepAwake(); refreshStatus(); }
+  if(pad){ hideTabs(); keepAwake(); refreshStatus(); }
+  else { showTabs(); }   // revela a barra por alguns segundos ao trocar de aba
   if(t==='movies' && !loaded.movies){ loaded.movies=1; loadMovies(); }
   if(t==='series' && !loaded.series){ loaded.series=1; loadSeries(); }
   if(t==='music'  && !loaded.music ){ loaded.music =1; loadMusic();  }
@@ -1058,6 +1065,19 @@ function showTab(t){
 }
 for(const b of document.querySelectorAll('#tabs button'))
   b.onclick=()=>showTab(b.dataset.tab);
+
+// --- barra de menu auto-escondida (aparece so quando chamada) ---
+const _tabs=document.getElementById('tabs'); let _tabsT=null;
+function hideTabs(){_tabs.classList.remove('show');clearTimeout(_tabsT);}
+function showTabs(){if(document.body.dataset.inpad==='1')return;
+  _tabs.classList.add('show');clearTimeout(_tabsT);_tabsT=setTimeout(()=>_tabs.classList.remove('show'),3200);}
+(function(){const g=document.getElementById('tabgrip');
+  g.addEventListener('touchstart',e=>{e.preventDefault();showTabs();},{passive:false});
+  g.addEventListener('click',showTabs);
+  // segurar/tocar na barra mantem ela aberta; ao soltar, reinicia o timer
+  _tabs.addEventListener('touchstart',()=>clearTimeout(_tabsT),{passive:true});
+  _tabs.addEventListener('touchend',()=>{clearTimeout(_tabsT);_tabsT=setTimeout(()=>_tabs.classList.remove('show'),3200);},{passive:true});
+})();
 document.getElementById('tomenu').onclick=()=>showTab('games');
 
 // ---------- musica ----------
