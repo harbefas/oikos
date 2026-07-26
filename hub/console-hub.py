@@ -452,10 +452,20 @@ def search_movies(term):
     return out
 
 
+def _prof1080(profiles):
+    """Escolhe o perfil que capa em 1080p (HD-1080p), nao o 'Any' (que pega 4K/Remux).
+    Numa TV 1080p e otimo; 4K ocupa 4-10x por ganho imperceptivel."""
+    for p in profiles:
+        n = p.get("name", "").lower()
+        if "1080" in n and "720" not in n:
+            return p["id"]
+    return profiles[0]["id"]
+
+
 def request_movie(tmdb_id):
     hits = radarr(f"/movie/lookup/tmdb?tmdbId={tmdb_id}")
     m = hits[0] if isinstance(hits, list) else hits
-    qp = radarr("/qualityprofile")[0]["id"]
+    qp = _prof1080(radarr("/qualityprofile"))
     root = radarr("/rootfolder")[0]["path"]   # o que estiver configurado, nao hardcode
     body = {
         "title": m["title"], "tmdbId": m["tmdbId"], "year": m.get("year"),
@@ -507,7 +517,7 @@ def search_series(term):
 def request_series(tvdb_id):
     hits = sonarr(f"/series/lookup?term=tvdb:{tvdb_id}")
     m = hits[0]
-    qp = sonarr("/qualityprofile")[0]["id"]
+    qp = _prof1080(sonarr("/qualityprofile"))
     # monitora so a 1a temporada (piloto). Baixar a serie inteira sem querer
     # ja custou 56GB de The Wire. Se gostar, pede o resto pelo Sonarr.
     seasons = [{"seasonNumber": s["seasonNumber"],
