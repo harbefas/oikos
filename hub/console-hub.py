@@ -891,7 +891,6 @@ body[data-p="2"] #pnum{color:var(--p2)}
   border-radius:14px;display:flex;flex-direction:column;align-items:center;justify-content:center;
   gap:6px;color:var(--tx-3);font-size:14px;text-align:center;padding:0 14px;touch-action:none;user-select:none}
 #tpad small{font-size:10.5px;opacity:.7;line-height:1.4}
-#deskbtns{display:flex;gap:10px;padding:0 14px 6px}
 #deskbtns button{flex:1;padding:15px 8px;background:var(--ui);color:var(--tx);border:0;border-radius:10px;font:inherit;font-weight:600}
 #deskbtns button:active{background:var(--accent);color:#fff}
 #deskkeys{display:flex;flex-wrap:wrap;gap:8px;padding:6px 14px 24px}
@@ -936,13 +935,9 @@ body[data-p="2"] #pnum{color:var(--p2)}
       <button data-mod=ctrl>Ctrl</button><button data-mod=alt>Alt</button><button data-mod=super>Super</button>
       <button data-key=left>←</button><button data-key=up>↑</button><button data-key=down>↓</button><button data-key=right>→</button>
       <button data-key=backspace>⌫</button><button data-key=enter>⏎</button>
+      <button id=btnsuperc>⊞ C</button>
     </div>
     <div class=sec>Mouse</div>
-    <div id=deskbtns>
-      <button data-clk=left>Clique esq.</button>
-      <button data-clk=mid>Meio</button>
-      <button data-clk=right>Clique dir.</button>
-    </div>
     <div id=padrow>
       <div id=tpad>trackpad<br><small>arraste move · toque clica · 2 dedos rolar</small></div>
     </div>
@@ -1407,9 +1402,8 @@ window.addEventListener('click', goFullscreen);
     if(Math.abs(dx)>1||Math.abs(dy)>1){moved=true;ptr({dx:Math.round(dx*1.7),dy:Math.round(dy*1.7)});lx=t.clientX;ly=t.clientY;}},{passive:false});
   tpad.addEventListener('touchend',ev=>{ev.preventDefault();
     if(!moved&&Date.now()-t0<220){const c=startFingers>=2?'right':'left';buzz(10);ptr({click:c,state:1});setTimeout(()=>ptr({click:c,state:0}),25);}},{passive:false});
-  // --- botoes de clique ---
-  for(const b of document.querySelectorAll('#deskbtns button[data-clk]')){const c=b.dataset.clk;
-    b.onclick=()=>{buzz();ptr({click:c,state:1});setTimeout(()=>ptr({click:c,state:0}),25);};}
+  // --- atalho Super+C ---
+  document.getElementById('btnsuperc').onclick=()=>{buzz(15);key({char:'c',mods:['super']});};
   // --- teclado nativo do celular ---
   const kbin=document.getElementById('kbin');
   document.getElementById('kbtoggle').onclick=()=>{kbin.focus();};
