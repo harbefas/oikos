@@ -918,7 +918,7 @@ body[data-screen] #deskscreen{display:flex}
   border-radius:14px;display:flex;flex-direction:column;align-items:center;justify-content:center;
   gap:6px;color:var(--tx-3);font-size:14px;text-align:center;padding:0 14px;touch-action:none;user-select:none}
 #tpad small{font-size:10.5px;opacity:.7;line-height:1.4}
-#screentoggle.on{background:var(--accent)!important;color:#fff!important}
+#screentoggle.on,#kbtoggle.on{background:var(--accent)!important;color:#fff!important}
 #deskbtns button{flex:1;padding:15px 8px;background:var(--ui);color:var(--tx);border:0;border-radius:10px;font:inherit;font-weight:600}
 #deskbtns button:active{background:var(--accent);color:#fff}
 #deskkeys{display:flex;flex-wrap:wrap;gap:8px;padding:calc(env(safe-area-inset-top,0px) + 12px) 14px 8px;
@@ -1468,7 +1468,10 @@ window.addEventListener('click', goFullscreen);
     if(on)startDeskScreen();else stopDeskScreen();};
   // --- teclado nativo do celular ---
   const kbin=document.getElementById('kbin');
-  document.getElementById('kbtoggle').onclick=()=>{kbin.focus();};
+  const kbt=document.getElementById('kbtoggle');
+  kbt.onclick=()=>{ if(document.activeElement===kbin){ kbin.blur(); kbt.classList.remove('on'); }
+    else { kbin.focus(); kbt.classList.add('on'); } };
+  kbin.addEventListener('blur',()=>kbt.classList.remove('on'));
   tpad.addEventListener('dblclick',()=>kbin.focus());
   kbin.addEventListener('beforeinput',ev=>{
     if(ev.inputType==='insertText'&&ev.data){for(const ch of ev.data)key({char:ch,mods:activeMods()});clearMods();}
