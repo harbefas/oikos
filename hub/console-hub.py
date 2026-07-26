@@ -885,18 +885,21 @@ body[data-p="2"] #pnum{color:var(--p2)}
 /* apps */
 .app{background:var(--surface)!important;border:1px solid var(--border)!important;color:var(--tx)}
 /* desktop: mouse + teclado */
-/* trackpad embaixo, largura cheia */
-#padrow{padding:6px 14px 20px;height:42vh}
+/* aba PC: coluna que preenche a tela (sem scroll da pagina) */
+#v-desk{display:flex;flex-direction:column;height:100%}
+#deskscreen{display:none;flex:0 0 auto;margin:8px 14px 4px;border-radius:12px;overflow:hidden;
+  background:#000;border:1px solid var(--border);aspect-ratio:16/9;align-items:center;justify-content:center}
+body[data-screen] #deskscreen{display:flex}
+#deskimg{width:100%;height:100%;object-fit:contain;display:block}
+#padrow{flex:1;min-height:0;padding:4px 14px 16px}
 #tpad{width:100%;height:100%;background:var(--surface);border:1px solid var(--border);
   border-radius:14px;display:flex;flex-direction:column;align-items:center;justify-content:center;
   gap:6px;color:var(--tx-3);font-size:14px;text-align:center;padding:0 14px;touch-action:none;user-select:none}
 #tpad small{font-size:10.5px;opacity:.7;line-height:1.4}
-#deskscreen{margin:2px 14px 8px;border-radius:12px;overflow:hidden;background:#000;
-  border:1px solid var(--border);aspect-ratio:16/9;display:flex;align-items:center;justify-content:center}
-#deskimg{width:100%;height:100%;object-fit:contain;display:block}
+#screentoggle.on{background:var(--accent)!important;color:#fff!important}
 #deskbtns button{flex:1;padding:15px 8px;background:var(--ui);color:var(--tx);border:0;border-radius:10px;font:inherit;font-weight:600}
 #deskbtns button:active{background:var(--accent);color:#fff}
-#deskkeys{display:flex;flex-wrap:wrap;gap:8px;padding:6px 14px 24px}
+#deskkeys{display:flex;flex-wrap:wrap;gap:8px;padding:8px 14px 8px}
 #deskkeys button{background:var(--ui);color:var(--tx);border:0;border-radius:8px;padding:11px 15px;font:inherit;font-weight:600;min-width:46px}
 #deskkeys button:active,#deskkeys button.on{background:var(--accent);color:#fff}
 #kbin{position:fixed;bottom:-40px;left:0;width:1px;height:1px;opacity:0;border:0}
@@ -931,18 +934,16 @@ body[data-p="2"] #pnum{color:var(--p2)}
   </div>
 
   <div class="view" id=v-desk>
-    <div class=sec>Tela</div>
     <div id=deskscreen><img id=deskimg alt="tela do PC"></div>
-    <div class=sec>Teclado</div>
     <div id=deskkeys>
       <button id=kbtoggle>⌨ Digitar</button>
+      <button id=screentoggle>👁 Tela</button>
       <button data-key=esc>Esc</button><button data-key=tab>Tab</button>
       <button data-mod=ctrl>Ctrl</button><button data-mod=alt>Alt</button><button data-mod=super>Super</button>
       <button data-key=left>←</button><button data-key=up>↑</button><button data-key=down>↓</button><button data-key=right>→</button>
       <button data-key=backspace>⌫</button><button data-key=enter>⏎</button>
       <button id=btnsuperc>⊞ C</button>
     </div>
-    <div class=sec>Mouse</div>
     <div id=padrow>
       <div id=tpad>trackpad<br><small>arraste move · toque clica · 2 dedos rolar</small></div>
     </div>
@@ -1049,7 +1050,8 @@ function showTab(t){
   if(t==='movies' && !loaded.movies){ loaded.movies=1; loadMovies(); }
   if(t==='series' && !loaded.series){ loaded.series=1; loadSeries(); }
   if(t==='music'  && !loaded.music ){ loaded.music =1; loadMusic();  }
-  if(t==='desk') startDeskScreen(); else stopDeskScreen();
+  if(t==='desk'){ if(document.body.hasAttribute('data-screen')) startDeskScreen(); }
+  else stopDeskScreen();
 }
 for(const b of document.querySelectorAll('#tabs button'))
   b.onclick=()=>showTab(b.dataset.tab);
@@ -1319,7 +1321,7 @@ function closeTv(){ document.getElementById('tvview').classList.remove('on'); cl
 let deskT=null;
 function deskTick(){const img=document.getElementById('deskimg');if(!img)return;
   const u='/api/tv?'+Date.now();const pre=new Image();pre.onload=()=>{img.src=u;};pre.src=u;}
-function startDeskScreen(){deskTick();if(!deskT)deskT=setInterval(deskTick,1600);}
+function startDeskScreen(){deskTick();if(!deskT)deskT=setInterval(deskTick,700);}
 function stopDeskScreen(){if(deskT){clearInterval(deskT);deskT=null;}}
 
 // ---------- gamepad (controle) ----------
@@ -1417,6 +1419,10 @@ window.addEventListener('click', goFullscreen);
     if(!moved&&Date.now()-t0<220){const c=startFingers>=2?'right':'left';buzz(10);ptr({click:c,state:1});setTimeout(()=>ptr({click:c,state:0}),25);}},{passive:false});
   // --- atalho Super+C ---
   document.getElementById('btnsuperc').onclick=()=>{buzz(15);key({char:'c',mods:['super']});};
+  // --- mostrar/esconder a tela do PC (grim so roda quando ligado) ---
+  const st=document.getElementById('screentoggle');
+  st.onclick=()=>{const on=document.body.toggleAttribute('data-screen');st.classList.toggle('on',on);buzz();
+    if(on)startDeskScreen();else stopDeskScreen();};
   // --- teclado nativo do celular ---
   const kbin=document.getElementById('kbin');
   document.getElementById('kbtoggle').onclick=()=>{kbin.focus();};
