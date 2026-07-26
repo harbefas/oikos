@@ -8,7 +8,7 @@ Estende o padserver. Alem de servir os gamepads virtuais (uinput), oferece:
 
 Lanca via `swaymsg exec` na sessao Sway. Sem app no celular.
 """
-import hashlib, json, os, socket, struct, subprocess, urllib.parse, urllib.request, zlib
+import hashlib, json, os, re, socket, struct, subprocess, urllib.parse, urllib.request, zlib
 from urllib.parse import urlparse, parse_qs
 
 MPV_SOCK = "/tmp/mpv.sock"
@@ -358,6 +358,59 @@ def list_games():
                 "name": stem, "path": os.path.join(d, f),
                 "cover": f"/cover/{sysname}/{urllib.parse.quote(stem)}" if os.path.exists(cover) else None,
             })
+    return games
+
+
+# --- jogos de PC via Steam (celular vira o controle pelo gamepad uinput) ---
+STEAM_ROOT = os.environ.get("OIKOS_STEAM", os.path.expanduser("~/.local/share/Steam"))
+STEAM_SKIP = {"228980", "1070560", "1391110", "1493710", "1628350", "1826330",
+              "1887720", "2180100", "2348590"}  # Proton / Steam Linux Runtime / redistribs
+
+
+def _steam_libs():
+    libs = [STEAM_ROOT]
+    try:
+        vdf = open(os.path.join(STEAM_ROOT, "config", "libraryfolders.vdf")).read()
+        for p in re.findall(r'"path"\s*"([^"]+)"', vdf):
+            if p not in libs:
+                libs.append(p)
+    except OSError:
+        pass
+    return libs
+
+
+def _steam_cover(appid):
+    for base in (STEAM_ROOT, os.path.expanduser("~/.steam/steam")):
+        p = os.path.join(base, "appcache", "librarycache", appid, "library_600x900.jpg")
+        if os.path.exists(p):
+            return p
+    return None
+
+
+def list_steam():
+    games, seen = [], set()
+    for lib in _steam_libs():
+        d = os.path.join(lib, "steamapps")
+        if not os.path.isdir(d):
+            continue
+        for f in os.listdir(d):
+            if not (f.startswith("appmanifest_") and f.endswith(".acf")):
+                continue
+            try:
+                txt = open(os.path.join(d, f), encoding="utf-8", errors="ignore").read()
+            except OSError:
+                continue
+            appid = next(iter(re.findall(r'"appid"\s*"(\d+)"', txt)), None)
+            name = next(iter(re.findall(r'"name"\s*"([^"]+)"', txt)), None)
+            if not appid or appid in STEAM_SKIP or appid in seen:
+                continue
+            if name and any(s in name for s in ("Proton", "Steam Linux Runtime", "Steamworks")):
+                continue
+            seen.add(appid)
+            games.append({"system": "steam", "label": "PC", "name": name or appid,
+                          "path": appid,
+                          "cover": f"/steamcover/{appid}" if _steam_cover(appid) else None})
+    games.sort(key=lambda g: g["name"].lower())
     return games
 
 
@@ -1625,7 +1678,7 @@ class Handler(BaseHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(ICON_PNG)
         elif path == "/api/games":
-            self._json(list_games())
+            self._json(list_games() + list_steam())
         elif path == "/api/apps":
             self._json(APPS)
         elif path == "/api/recent":
@@ -1749,6 +1802,18 @@ class Handler(BaseHTTPRequestHandler):
                 self.wfile.write(data)
             else:
                 self.send_response(404); self.end_headers()
+        elif path.startswith("/steamcover/"):
+            p = _steam_cover(path[len("/steamcover/"):])
+            if p:
+                data = open(p, "rb").read()
+                self.send_response(200)
+                self.send_header("Content-Type", "image/jpeg")
+                self.send_header("Cache-Control", "max-age=86400")
+                self.send_header("Content-Length", str(len(data)))
+                self.end_headers()
+                self.wfile.write(data)
+            else:
+                self.send_response(404); self.end_headers()
         else:
             self.send_response(404); self.end_headers()
 
@@ -1808,13 +1873,18 @@ class Handler(BaseHTTPRequestHandler):
 
         elif path == "/api/launch":
             sysname = d.get("system"); rom = d.get("path")
-            conf = SYSTEMS.get(sysname)
-            if conf and rom and os.path.exists(rom):
+            if sysname == "steam" and rom and rom.isdigit():
                 subprocess.run(["stop-game"])
-                sway_exec(f"{conf['cmd']} '{rom}'")
+                sway_exec(f"steam steam://rungameid/{rom}")
                 self._json({"ok": True})
             else:
-                self._json({"ok": False}, 400)
+                conf = SYSTEMS.get(sysname)
+                if conf and rom and os.path.exists(rom):
+                    subprocess.run(["stop-game"])
+                    sway_exec(f"{conf['cmd']} '{rom}'")
+                    self._json({"ok": True})
+                else:
+                    self._json({"ok": False}, 400)
 
         elif path == "/api/app":
             app = next((a for a in APPS if a["id"] == d.get("id")), None)

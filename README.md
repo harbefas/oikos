@@ -63,7 +63,8 @@ The single web page you drive everything from. One Python file, standard library
 plus [`python-evdev`](https://pypi.org/project/evdev/). No app, no HTTPS required
 (it uses the Fullscreen API, which works over plain HTTP on Android).
 
-- **Games** — grid of box art for PS2 (PCSX2) and N64 (RetroArch). Tap to launch;
+- **Games** — grid of box art for PS2 (PCSX2), N64 (RetroArch) and your **Steam**
+  library (launched via `steam://`). Tap to launch;
   the phone turns into a virtual gamepad (two analog sticks, d-pad with diagonals,
   L1/L2/R1/R2, turbo, a d-pad/analog swap). Two players via `?p=2`. Locks to landscape.
 - **Desktop** — use the phone as a real **mouse + keyboard** for the box (uinput):
