@@ -898,7 +898,7 @@ body[data-p="2"] #pnum{color:var(--p2)}
   background:#000;border:1px solid var(--border);aspect-ratio:16/9;align-items:center;justify-content:center}
 body[data-screen] #deskscreen{display:flex}
 #deskimg{width:100%;height:100%;object-fit:contain;display:block}
-#padrow{flex:0 0 44vh;min-height:0;padding:2px 14px 14px}
+#padrow{flex:0 0 44vh;min-height:0;padding:2px 14px 34px}   /* padding de baixo afasta da alça do menu */
 #tpad{width:100%;height:100%;background:var(--surface);border:1px solid var(--border);
   border-radius:14px;display:flex;flex-direction:column;align-items:center;justify-content:center;
   gap:6px;color:var(--tx-3);font-size:14px;text-align:center;padding:0 14px;touch-action:none;user-select:none}
