@@ -623,20 +623,24 @@ body[data-mode=media] #miniplayer,body[data-inpad=1] #miniplayer{display:none!im
 /* --- estilos do gamepad (copiado do padserver) --- */
 #pad *{touch-action:none}
 .p{position:absolute}
-#ls{left:2vw;top:calc(20vh - 30px);width:44vh;height:44vh;max-width:300px;max-height:300px;
+/* analogico PRINCIPAL: canto inferior esquerdo (polegar esq), grande */
+#ls{left:3vw;bottom:4vh;width:50vh;height:50vh;max-width:360px;max-height:360px;
   border-radius:50%;background:radial-gradient(circle,#232833,#1a1e26);border:2px solid #333a47}
-#lk{width:40%;height:40%;background:#4f8cff;box-shadow:0 3px 14px #0009}
-#rs{right:24vw;bottom:2vh;width:28vh;height:28vh;max-width:185px;max-height:185px;
+#lk{width:42%;height:42%;background:#4f8cff;box-shadow:0 4px 18px #0009}
+/* analogico direito (C / stick direito): superior direito, menor */
+#rs{right:5vw;top:13vh;width:26vh;height:26vh;max-width:190px;max-height:190px;
   border-radius:50%;background:radial-gradient(circle,#2a2618,#201d14);border:2px solid #46402a}
-#rk{width:42%;height:42%;background:#e8c33a;box-shadow:0 3px 14px #0009}
+#rk{width:44%;height:44%;background:#e8c33a;box-shadow:0 4px 18px #0009}
 .knob{position:absolute;left:50%;top:50%;border-radius:50%;transform:translate(-50%,-50%);pointer-events:none}
-#face{right:2vw;top:calc(17vh - 30px);display:grid;grid-template-columns:repeat(3,13vh);grid-template-rows:repeat(3,13vh);gap:1.1vh}
-#face button{border-radius:50%;font-size:3.7vh;background:#333a47}
+/* botoes de acao: canto inferior direito (polegar dir), maiores */
+#face{right:4vw;bottom:6vh;display:grid;grid-template-columns:repeat(3,15.5vh);grid-template-rows:repeat(3,15.5vh);gap:1.3vh}
+#face button{border-radius:50%;font-size:4.4vh;background:#333a47}
 #face button[data-b=a]{background:#3d5a3d}#face button[data-b=b]{background:#5a3d3d}
-#dpad{position:absolute;left:26vw;bottom:2vh;display:grid;grid-template-columns:repeat(3,8.5vh);grid-template-rows:repeat(3,8.5vh);gap:.6vh}
-#dpad button{font-size:2.8vh;border-radius:1.5vh;opacity:.9}
-#tl{left:2vw;top:2vh;display:flex;gap:1.2vh}#tr{right:2vw;top:2vh}
-.trig{width:16vh;height:9vh;font-size:2.8vh;border-radius:2.4vh}#bz{background:#7a4de8}
+/* d-pad: superior esquerdo (secundario), maior */
+#dpad{position:absolute;left:5vw;top:13vh;display:grid;grid-template-columns:repeat(3,10.5vh);grid-template-rows:repeat(3,10.5vh);gap:.7vh}
+#dpad button{font-size:3.4vh;border-radius:1.6vh;opacity:.9}
+#tl{left:2vw;top:2vh;display:flex;gap:1.4vh}#tr{right:13vw;top:2vh}
+.trig{width:19vh;height:11vh;font-size:3.2vh;border-radius:2.6vh}#bz{background:#7a4de8}
 #mid{left:50%;top:3vh;transform:translateX(-50%);display:flex;gap:1.4vh;align-items:center}
 #mid button[data-b]{width:16vh;height:6vh;font-size:2vh;border-radius:3vh}
 #tomenu{width:6vh;height:6vh;font-size:3vh;border-radius:50%;background:#3a4150!important;opacity:.75}
@@ -826,7 +830,7 @@ body[data-p="2"] #pnum{color:var(--p2)}
   <div class="p" id=tr><button class=trig data-b=r>R</button></div>
   <div class="p" id=mid><button id=tomenu>☰</button><button data-b=start>START</button><span id=pnum>P1</span><button data-b=select>SEL</button></div>
   <div id=dpad><div></div><button data-b=up>▲</button><div></div><button data-b=left>◀</button><div></div><button data-b=right>▶</button><div></div><button data-b=down>▼</button><div></div></div>
-  <div class="p" id=face><div></div><button data-b=x>X</button><div></div><button data-b=y>Y</button><div></div><button data-b=a>A</button><div></div><button data-b=b>B</button><div></div></div>
+  <div class="p" id=face><div></div><button data-b=y>Y</button><div></div><button data-b=x>X</button><div></div><button data-b=a>A</button><div></div><button data-b=b>B</button><div></div></div>
   <div class="p" id=ls><div class=knob id=lk></div><span class=lbl>ANALÓGICO</span></div>
   <div class="p" id=rs><div class=knob id=rk></div><span class=lbl>C</span></div>
 
