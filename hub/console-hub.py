@@ -639,8 +639,11 @@ body[data-mode=media] #miniplayer,body[data-inpad=1] #miniplayer{display:none!im
 /* d-pad: superior esquerdo (secundario), maior */
 #dpad{position:absolute;left:5vw;top:13vh;display:grid;grid-template-columns:repeat(3,10.5vh);grid-template-rows:repeat(3,10.5vh);gap:.7vh}
 #dpad button{font-size:3.4vh;border-radius:1.6vh;opacity:.9}
-#tl{left:2vw;top:2vh;display:flex;gap:1.4vh}#tr{right:13vw;top:2vh}
-.trig{width:19vh;height:11vh;font-size:3.2vh;border-radius:2.6vh}#bz{background:#7a4de8}
+#tl{left:2vw;top:2vh;display:flex;flex-direction:column;gap:1.1vh}
+#tr{right:13vw;top:2vh;display:flex;flex-direction:column;gap:1.1vh}
+.trig{width:18vh;height:8.5vh;font-size:2.7vh;border-radius:2.2vh}
+#turbo{width:13vh;height:5.5vh;font-size:1.7vh!important;font-weight:800;letter-spacing:.04em;opacity:.55}
+#dpad button{pointer-events:none}   /* o container #dpad captura o toque (diagonais) */
 #mid{left:50%;top:3vh;transform:translateX(-50%);display:flex;gap:1.4vh;align-items:center}
 #mid button[data-b]{width:16vh;height:6vh;font-size:2vh;border-radius:3vh}
 #tomenu{width:6vh;height:6vh;font-size:3vh;border-radius:50%;background:#3a4150!important;opacity:.75}
@@ -779,7 +782,7 @@ body[data-p="2"] #pnum{color:var(--p2)}
 #tomenu{background:var(--ui)!important}
 #face button[data-b=a]{background:var(--accent-2)!important}
 #face button[data-b=b]{background:var(--p2)!important}
-#pad button#bz{background:var(--accent-2)!important}
+#turbo.on{background:var(--accent)!important;color:#fff!important;opacity:1!important}
 #ls{background:radial-gradient(circle,var(--surface),var(--bg2))!important;border:2px solid var(--ui)!important}
 #rs{background:radial-gradient(circle,var(--surface),var(--bg2))!important;border:2px solid var(--ui)!important}
 #lk{background:var(--accent)!important}
@@ -826,9 +829,9 @@ body[data-p="2"] #pnum{color:var(--p2)}
 <div id=pad>
   <div id=np-bg></div>
   <button id=tvbtn onclick="openTv()">📺</button>
-  <div class="p" id=tl><button class=trig data-b=l>L</button><button class="trig" id=bz data-b=z>Z</button></div>
-  <div class="p" id=tr><button class=trig data-b=r>R</button></div>
-  <div class="p" id=mid><button id=tomenu>☰</button><button data-b=start>START</button><span id=pnum>P1</span><button data-b=select>SEL</button></div>
+  <div class="p" id=tl><button class=trig data-b=l>L1</button><button class=trig data-b=z>L2</button></div>
+  <div class="p" id=tr><button class=trig data-b=r>R1</button><button class=trig data-b=r2>R2</button></div>
+  <div class="p" id=mid><button id=tomenu>☰</button><button data-b=start>START</button><button id=turbo>TURBO</button><span id=pnum>P1</span><button data-b=select>SEL</button></div>
   <div id=dpad><div></div><button data-b=up>▲</button><div></div><button data-b=left>◀</button><div></div><button data-b=right>▶</button><div></div><button data-b=down>▼</button><div></div></div>
   <div class="p" id=face><div></div><button data-b=y>Y</button><div></div><button data-b=x>X</button><div></div><button data-b=a>A</button><div></div><button data-b=b>B</button><div></div></div>
   <div class="p" id=ls><div class=knob id=lk></div><span class=lbl>ANALÓGICO</span></div>
@@ -1157,6 +1160,9 @@ async function refreshStatus(){
     document.getElementById('mp-title').textContent = 'Jogo rodando';
     document.getElementById('mp-sub').textContent = 'toque para abrir o controle';
     art.style.display='none'; pp.style.display='none';
+    // rotulo do analogico direito: 'C' no N64 (retroarch), 'R' no PS2 (pcsx2)
+    const rsl=document.querySelector('#rs .lbl');
+    if(rsl) rsl.textContent = (s.current||'').includes('retro') ? 'C' : 'R';
   }
 }
 async function mpvBtn(action){
@@ -1179,19 +1185,52 @@ function closeTv(){ document.getElementById('tvview').classList.remove('on'); cl
 
 // ---------- gamepad (controle) ----------
 const post=o=>{o.p=P;return fetch('/p',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(o),keepalive:true}).catch(()=>{});};
-const buzz=()=>{try{navigator.vibrate&&navigator.vibrate(8)}catch(_){}};
+const buzz=(ms=12)=>{try{navigator.vibrate&&navigator.vibrate(ms)}catch(_){}};
+
+// turbo: enquanto ON, segurar um botao de acao dispara repetido (~11Hz)
+const FACE=new Set(['a','b','x','y']);
+let turbo=false;
+const tb=document.getElementById('turbo');
+tb.addEventListener('click',()=>{turbo=!turbo;tb.classList.toggle('on',turbo);buzz(turbo?25:12);});
+
+// botoes (menos o d-pad, que tem controlador de posicao pra diagonais)
 for(const el of document.querySelectorAll('#pad button[data-b]')){
-  const b=el.dataset.b;
-  const d=ev=>{ev.preventDefault();el.classList.add('on');buzz();post({btn:b,state:1})};
-  const u=ev=>{ev.preventDefault();el.classList.remove('on');post({btn:b,state:0})};
+  if(el.closest('#dpad'))continue;
+  const b=el.dataset.b; let ti=null;
+  const d=ev=>{ev.preventDefault();el.classList.add('on');buzz(FACE.has(b)?10:16);
+    if(turbo&&FACE.has(b)){let on=true;post({btn:b,state:1});
+      ti=setInterval(()=>{on=!on;post({btn:b,state:on?1:0});},46);}
+    else post({btn:b,state:1});};
+  const u=ev=>{ev.preventDefault();el.classList.remove('on');
+    if(ti){clearInterval(ti);ti=null;}post({btn:b,state:0});};
   el.addEventListener('touchstart',d,{passive:false});el.addEventListener('touchend',u,{passive:false});
   el.addEventListener('touchcancel',u,{passive:false});el.addEventListener('mousedown',d);el.addEventListener('mouseup',u);el.addEventListener('mouseleave',u);
 }
+
+// d-pad por posicao do toque -> suporta diagonais (2 direcoes juntas)
+function dpad(el){
+  const btn={}; for(const k of ['up','down','left','right']) btn[k]=el.querySelector('[data-b='+k+']');
+  let id=null; const cur={up:0,down:0,left:0,right:0};
+  function set(want){for(const k in cur){const v=want[k]?1:0;
+    if(v!==cur[k]){cur[k]=v;post({btn:k,state:v});btn[k].classList.toggle('on',!!v);if(v)buzz(8);}}}
+  function calc(t){const r=el.getBoundingClientRect(),dead=r.width*0.17;
+    const dx=t.clientX-(r.left+r.width/2),dy=t.clientY-(r.top+r.height/2);
+    set({up:dy<-dead,down:dy>dead,left:dx<-dead,right:dx>dead});}
+  el.addEventListener('touchstart',ev=>{ev.preventDefault();if(id===null){id=ev.changedTouches[0].identifier;calc(ev.changedTouches[0]);}},{passive:false});
+  el.addEventListener('touchmove',ev=>{ev.preventDefault();for(const t of ev.changedTouches)if(t.identifier===id)calc(t);},{passive:false});
+  const end=ev=>{for(const t of ev.changedTouches)if(t.identifier===id){id=null;set({});}};
+  el.addEventListener('touchend',end,{passive:false});el.addEventListener('touchcancel',end,{passive:false});
+  el.addEventListener('mousedown',ev=>{ev.preventDefault();id='m';calc(ev)});
+  window.addEventListener('mousemove',ev=>{if(id==='m')calc(ev)});
+  window.addEventListener('mouseup',()=>{if(id==='m'){id=null;set({});}});
+}
+dpad(document.getElementById('dpad'));
+
 function stick(pad,knob,which){
   let id=null,last=0,px=0,py=0;
-  function move(t){const r=pad.getBoundingClientRect(),R=r.width/2;let dx=t.clientX-(r.left+R),dy=t.clientY-(r.top+R);const d=Math.hypot(dx,dy);if(d>R){dx*=R/d;dy*=R/d;}knob.style.transform=`translate(calc(-50% + ${dx}px),calc(-50% + ${dy}px))`;const x=Math.round(dx/R*32767),y=Math.round(dy/R*32767),now=Date.now();if(now-last>16&&(x!==px||y!==py)){last=now;px=x;py=y;post({axis:which,x,y});}}
+  function move(t){const r=pad.getBoundingClientRect(),R=r.width/2;let dx=t.clientX-(r.left+R),dy=t.clientY-(r.top+R);const d=Math.hypot(dx,dy);if(d>R){dx*=R/d;dy*=R/d;}knob.style.transform=`translate(calc(-50% + ${dx}px),calc(-50% + ${dy}px))`;let x=Math.round(dx/R*32767),y=Math.round(dy/R*32767);if(Math.hypot(dx,dy)<R*0.10){x=0;y=0;}const now=Date.now();if(now-last>16&&(x!==px||y!==py)){last=now;px=x;py=y;post({axis:which,x,y});}}
   function reset(){knob.style.transform='translate(-50%,-50%)';px=py=0;post({axis:which,x:0,y:0});}
-  pad.addEventListener('touchstart',ev=>{ev.preventDefault();if(id===null){id=ev.changedTouches[0].identifier;buzz();move(ev.changedTouches[0]);}},{passive:false});
+  pad.addEventListener('touchstart',ev=>{ev.preventDefault();if(id===null){id=ev.changedTouches[0].identifier;buzz(10);move(ev.changedTouches[0]);}},{passive:false});
   pad.addEventListener('touchmove',ev=>{ev.preventDefault();for(const t of ev.changedTouches)if(t.identifier===id)move(t);},{passive:false});
   const end=ev=>{ev.preventDefault();for(const t of ev.changedTouches)if(t.identifier===id){id=null;reset();}};
   pad.addEventListener('touchend',end,{passive:false});pad.addEventListener('touchcancel',end,{passive:false});
