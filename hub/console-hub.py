@@ -891,15 +891,17 @@ body[data-p="2"] #pnum{color:var(--p2)}
   background:#000;border:1px solid var(--border);aspect-ratio:16/9;align-items:center;justify-content:center}
 body[data-screen] #deskscreen{display:flex}
 #deskimg{width:100%;height:100%;object-fit:contain;display:block}
-#padrow{flex:1;min-height:0;padding:4px 14px 16px;display:flex;align-items:center;justify-content:center}
-#tpad{width:100%;height:100%;max-height:44vh;background:var(--surface);border:1px solid var(--border);
+#padrow{flex:0 0 44vh;min-height:0;padding:2px 14px 14px}
+#tpad{width:100%;height:100%;background:var(--surface);border:1px solid var(--border);
   border-radius:14px;display:flex;flex-direction:column;align-items:center;justify-content:center;
   gap:6px;color:var(--tx-3);font-size:14px;text-align:center;padding:0 14px;touch-action:none;user-select:none}
 #tpad small{font-size:10.5px;opacity:.7;line-height:1.4}
 #screentoggle.on{background:var(--accent)!important;color:#fff!important}
 #deskbtns button{flex:1;padding:15px 8px;background:var(--ui);color:var(--tx);border:0;border-radius:10px;font:inherit;font-weight:600}
 #deskbtns button:active{background:var(--accent);color:#fff}
-#deskkeys{display:flex;flex-wrap:wrap;gap:8px;padding:8px 14px 8px}
+#deskkeys{display:flex;flex-wrap:wrap;gap:8px;padding:calc(env(safe-area-inset-top,0px) + 12px) 14px 8px;
+  flex:1;align-content:center;justify-content:center}
+body[data-screen] #deskkeys{flex:0 0 auto;padding-top:8px}   /* com a tela ligada, ela ocupa o topo */
 #deskkeys button{background:var(--ui);color:var(--tx);border:0;border-radius:8px;padding:11px 15px;font:inherit;font-weight:600;min-width:46px}
 #deskkeys button:active,#deskkeys button.on{background:var(--accent);color:#fff}
 #kbin{position:fixed;bottom:-40px;left:0;width:1px;height:1px;opacity:0;border:0}
