@@ -159,17 +159,22 @@ from evdev import UInput, AbsInfo, ecodes as e
 
 def make_icon(size=512):
     """PNG do icone (Python puro): fundo escuro + gamepad estilizado simples."""
-    bg = (15, 17, 21)       # #0f1115
-    fg = (79, 140, 255)     # #4f8cff
+    bg = (40, 45, 28)       # #282d1c (Cimarrão)
+    fg = (212, 160, 51)     # #d4a033 (âmbar mate)
     px = bytearray()
     cx, cy = size / 2, size / 2
+    r_stick = size * 0.058
     for y in range(size):
         px.append(0)        # filtro de linha
         for x in range(size):
-            # forma tosca de gamepad: elipse larga central
-            dx = (x - cx) / (size * 0.32)
-            dy = (y - cy) / (size * 0.20)
-            px += bytes(fg if dx * dx + dy * dy <= 1 else bg)
+            # corpo do gamepad: elipse larga central
+            dx = (x - cx) / (size * 0.34)
+            dy = (y - cy) / (size * 0.21)
+            body = dx * dx + dy * dy <= 1
+            # dois analogicos (furos escuros) pra ler como controle
+            h1 = ((x - cx + size * 0.14) ** 2 + (y - cy) ** 2) <= r_stick * r_stick
+            h2 = ((x - cx - size * 0.14) ** 2 + (y - cy) ** 2) <= r_stick * r_stick
+            px += bytes(fg if body and not (h1 or h2) else bg)
     idat = zlib.compress(bytes(px), 9)
 
     def chunk(typ, data):
@@ -182,9 +187,9 @@ def make_icon(size=512):
 
 ICON_PNG = make_icon()
 MANIFEST = json.dumps({
-    "name": "Homelab", "short_name": "Homelab",
+    "name": "Oikos", "short_name": "Oikos",
     "start_url": "/", "display": "fullscreen", "orientation": "landscape",
-    "background_color": "#0f1115", "theme_color": "#0f1115",
+    "background_color": "#282d1c", "theme_color": "#282d1c",
     "icons": [
         {"src": "/icon.png", "sizes": "512x512", "type": "image/png"},
         {"src": "/icon.png", "sizes": "192x192", "type": "image/png"},
@@ -554,13 +559,13 @@ def list_episodes(sid):
 
 PAGE = r"""<!doctype html><html><head><meta charset=utf-8>
 <meta name=viewport content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
-<title>Homelab</title>
+<title>Oikos</title>
 <link rel=manifest href=/manifest.json>
-<meta name=theme-color content=#0f1115>
+<meta name=theme-color content=#282d1c>
 <meta name=mobile-web-app-capable content=yes>
 <meta name=apple-mobile-web-app-capable content=yes>
 <meta name=apple-mobile-web-app-status-bar-style content=black-translucent>
-<meta name=apple-mobile-web-app-title content=Homelab>
+<meta name=apple-mobile-web-app-title content=Oikos>
 <link rel=apple-touch-icon href=/icon.png>
 <link rel=preconnect href=https://fonts.googleapis.com>
 <link rel=preconnect href=https://fonts.gstatic.com crossorigin>
