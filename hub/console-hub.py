@@ -966,7 +966,7 @@ body[data-screen] #deskkeys{flex:0 0 auto;padding-top:8px}   /* com a tela ligad
         <button data-key=esc>Esc</button><button data-key=tab>Tab</button>
         <button data-mod=ctrl>Ctrl</button><button data-mod=alt>Alt</button><button data-mod=super>Super</button>
         <button data-key=left>←</button><button data-key=up>↑</button><button data-key=down>↓</button><button data-key=right>→</button>
-        <button data-key=backspace>⌫</button><button data-key=enter>⏎</button>
+        <button data-key=backspace>⌫</button><button data-key=enter>Enter</button>
         <button data-char="1">1</button><button data-char="2">2</button><button data-char="3">3</button>
         <button id=btnsuperc>⊞ C</button>
       </div>
