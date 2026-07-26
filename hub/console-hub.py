@@ -885,11 +885,12 @@ body[data-p="2"] #pnum{color:var(--p2)}
 /* apps */
 .app{background:var(--surface)!important;border:1px solid var(--border)!important;color:var(--tx)}
 /* desktop: mouse + teclado */
-#tpad{margin:6px 14px 12px;height:42vh;background:var(--surface);border:1px solid var(--border);
+#tpad{margin:8px auto 12px;width:min(340px,82vw);height:30vh;max-height:280px;
+  background:var(--surface);border:1px solid var(--border);
   border-radius:14px;display:flex;flex-direction:column;align-items:center;justify-content:center;
-  gap:6px;color:var(--tx-3);font-size:15px;text-align:center;padding:0 20px;touch-action:none;user-select:none}
-#tpad small{font-size:11px;opacity:.7;line-height:1.4}
-#deskbtns{display:flex;gap:10px;padding:0 14px 6px}
+  gap:6px;color:var(--tx-3);font-size:14px;text-align:center;padding:0 18px;touch-action:none;user-select:none}
+#tpad small{font-size:10.5px;opacity:.7;line-height:1.4}
+#deskbtns{display:flex;gap:10px;padding:0 14px 6px;max-width:400px;margin:0 auto}
 #deskbtns button{flex:1;padding:15px 8px;background:var(--ui);color:var(--tx);border:0;border-radius:10px;font:inherit;font-weight:600}
 #deskbtns button:active{background:var(--accent);color:#fff}
 #deskkeys{display:flex;flex-wrap:wrap;gap:8px;padding:6px 14px 24px}
