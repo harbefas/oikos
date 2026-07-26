@@ -34,7 +34,7 @@ sudo pacman -Syu --needed --noconfirm \
   docker docker-compose \
   intel-media-driver libva-utils vulkan-intel \
   sway retroarch grim \
-  transmission-cli tailscale
+  tailscale
 # retroarch cores come separately:
 sudo pacman -S --needed --noconfirm libretro-mupen64plus-next 2>/dev/null || \
   warn "install an N64 core manually (e.g. libretro-mupen64plus-next from AUR)"
@@ -61,15 +61,12 @@ cd "$REPO_DIR/homelab"
 PUID="$PUID" PGID="$PGID" TZ="$TZ" docker compose up -d
 # note: Jellyfin needs /dev/dri; if the box has no iGPU, remove that block.
 
-# --- 5. transmission on the host (not Docker) -----------------------------
-say "Configuring Transmission (host, umask 002 so arrs can hardlink imports)"
-sudo mkdir -p /etc/systemd/system/transmission.service.d
-sudo tee /etc/systemd/system/transmission.service.d/override.conf >/dev/null <<EOF
-[Service]
-UMask=0002
-EOF
-sudo systemctl enable transmission || warn "enable transmission manually"
-warn "Set Transmission download dir to $MEDIA/downloads and categories movies/series/music in its config, then: sudo systemctl restart transmission"
+# (Transmission runs in the compose now -- no host setup needed.)
+
+# --- 5. wire the stack (Jellyfin wizard, arrs, download client, Prowlarr) ---
+say "Configuring the stack via API (stack-setup.py)"
+python "$REPO_DIR/homelab/stack-setup.py" || \
+  warn "stack-setup.py failed (containers still starting?). Re-run it, or paste agent-config-prompt.md to an agent."
 
 # --- 6. Console Hub + launchers -------------------------------------------
 say "Installing Console Hub + launchers"
@@ -82,6 +79,10 @@ After=graphical.target
 
 [Service]
 User=$USER_NAME
+Environment=OIKOS_JF_KEY_FILE=$REPO_DIR/homelab/jf.key
+Environment=OIKOS_RADARR_KEY_FILE=$REPO_DIR/homelab/config/radarr/config.xml
+Environment=OIKOS_SONARR_KEY_FILE=$REPO_DIR/homelab/config/sonarr/config.xml
+Environment=OIKOS_HOME=/home/$USER_NAME
 ExecStart=/usr/bin/python3 /opt/console-hub/console-hub.py
 Restart=on-failure
 
@@ -93,25 +94,21 @@ sudo systemctl enable console-hub || warn "start console-hub after configuring p
 
 # --- done ------------------------------------------------------------------
 IP="$(ip -4 addr show scope global | grep -oP '(?<=inet )[\d.]+' | head -1)"
-say "Base install done. Manual steps left:"
-warn "Steps 3-9 below can be done for you: paste homelab/agent-config-prompt.md to a coding agent with shell access on this box."
+say "Base install done. stack-setup.py already wired Jellyfin + arrs + Prowlarr."
 cat <<EOF
 
+  Left to do by hand:
   1. Log out/in (or 'newgrp docker') so the docker group applies.
   2. tailscale up          # interactive login, for access outside the LAN
-  3. Point Prowlarr (http://$IP:9696) at your indexers, then link Radarr/Sonarr/Lidarr.
-     Inside containers, reach each other + Transmission via 172.17.0.1 (NOT localhost).
-  4. In Radarr/Sonarr: add download client Transmission (172.17.0.1:9091),
-     set a 1080p quality profile, add remote path map /media/ -> /downloads/.
-  5. Jellyfin (http://$IP:8096): add libraries /media/movies and /media/series,
-     enable VAAPI hardware transcoding.
-  6. Bazarr: enable a language + create a profile + apply it (three screens).
-  7. Edit /opt/console-hub/console-hub.py if your paths/ports differ, put the
-     Jellyfin/Radarr/Sonarr API keys where it reads them, then:
-       sudo systemctl start console-hub
-     Open http://$IP:8100 on your phone.
-  8. Emulators: N64 (RetroArch) deps installed above. For PS2 install pcsx2-latest-bin
-     from the AUR and supply your own BIOS. Full config (parallel-rdp core, memory
-     card, quality flags) in emulators/README.md. Games work without the arr stack.
+  3. Prowlarr (http://$IP:9696): add your indexers (public: re-run
+       python homelab/stack-setup.py thepiratebay). They sync to the arrs automatically.
+  4. Bazarr (http://$IP:6767): enable a language + profile + a subtitle provider
+     (needs your provider account). Three screens, or it silently does nothing.
+  5. Jellyfin VAAPI: hardware transcoding is optional; enable it in the dashboard.
+  6. Start the hub:  sudo systemctl start console-hub   (open http://$IP:8100)
+  7. Gamepad: add yourself to the 'input' group + a udev rule for /dev/uinput,
+     or the phone pad stays disabled (media/mouse/keyboard still work).
+  8. Emulators: PS2 = pcsx2-latest-bin (AUR) + your own BIOS; see emulators/README.md.
+     Games work without the arr stack.
 
 EOF

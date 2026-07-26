@@ -1,7 +1,8 @@
-# Media stack for the homelab. One /media mount per container so hardlinks
-# work (separate /downloads + /movies mounts are cross-device and break them).
+# Media stack for the homelab. Everything runs in containers, including
+# Transmission, and every service mounts the SAME /media. Because downloads and
+# the libraries live under one mount, paths match across containers and Radarr/
+# Sonarr import with hardlinks -- no "remote path mapping" needed.
 # PUID/PGID must match the user that owns /media (see bootstrap-arch.sh).
-# Transmission runs on the HOST (systemd), not here, to keep permissions sane.
 
 services:
   jellyfin:
@@ -15,6 +16,17 @@ services:
     volumes:
       - ./config/jellyfin:/config
       - /media:/media
+
+  transmission:
+    image: lscr.io/linuxserver/transmission:latest
+    container_name: transmission
+    restart: unless-stopped
+    environment: ["PUID=${PUID}", "PGID=${PGID}", "TZ=${TZ}"]
+    ports: ["9091:9091", "51413:51413", "51413:51413/udp"]
+    volumes:
+      - ./config/transmission:/config
+      - /media:/media
+    # download-dir is set to /media/downloads by stack-setup.sh (RPC session-set)
 
   radarr:
     image: lscr.io/linuxserver/radarr:latest
@@ -56,9 +68,11 @@ services:
       - ./config/prowlarr:/config
 
   bazarr:
-    image: lscr.io/linuxserver/bazarr:latest
+    image: lscr.io/linuxserver/bazarr:1.5.1   # 1.6.0 has a broken missing_subtitles format
     container_name: bazarr
     restart: unless-stopped
+    dns: ["1.1.1.1", "8.8.8.8"]                # some subtitle hosts resolve only over IPv6;
+    sysctls: ["net.ipv6.conf.all.disable_ipv6=1"]  # force IPv4 so lookups don't fail
     environment: ["PUID=${PUID}", "PGID=${PGID}", "TZ=${TZ}"]
     ports: ["6767:6767"]
     volumes:

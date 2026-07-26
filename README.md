@@ -64,8 +64,11 @@ plus [`python-evdev`](https://pypi.org/project/evdev/). No app, no HTTPS require
 (it uses the Fullscreen API, which works over plain HTTP on Android).
 
 - **Games** — grid of box art for PS2 (PCSX2) and N64 (RetroArch). Tap to launch;
-  the phone turns into a virtual gamepad. Two players via `?p=2` (two identical
-  `uinput` devices, so an emulator autoconfig binds both).
+  the phone turns into a virtual gamepad (two analog sticks, d-pad with diagonals,
+  L1/L2/R1/R2, turbo, a d-pad/analog swap). Two players via `?p=2`. Locks to landscape.
+- **Desktop** — use the phone as a real **mouse + keyboard** for the box (uinput):
+  a trackpad, the phone's native keyboard, modifier keys for shortcuts, and an
+  on-demand live screen view (`grim`). Split left/right in landscape, stacked in portrait.
 - **Movies / Series** — posters pulled from Jellyfin as a catalog, played with
   **mpv** on the TV (not Jellyfin's own player). Built-in search adds titles to
   Radarr/Sonarr and shows live download progress (a tiny Jellyseerr).
@@ -118,9 +121,17 @@ as root, mpv as your desktop user): point it at that user's home so "continue
 watching" can find mpv's saved positions. "See the TV" needs `grim` and reads the
 Sway session on `WAYLAND_DISPLAY=wayland-1`, `XDG_RUNTIME_DIR=/run/user/1000`.
 
-API keys are **read from disk at runtime**, never hardcoded: Jellyfin from
-`/srv/jellyfin/console-hub.key`, Radarr/Sonarr from each container's `config.xml`.
-Point these at your own paths.
+API keys are **never hardcoded** — pass them or point at a file, per service:
+
+| Service | Direct env | Or file env | Default file |
+|---------|-----------|-------------|--------------|
+| Jellyfin | `OIKOS_JF_KEY` | `OIKOS_JF_KEY_FILE` | `/srv/jellyfin/console-hub.key` |
+| Radarr | `OIKOS_RADARR_KEY` | `OIKOS_RADARR_KEY_FILE` | (legacy path) |
+| Sonarr | `OIKOS_SONARR_KEY` | `OIKOS_SONARR_KEY_FILE` | `docker exec sonarr` fallback |
+
+With the compose stack, point the `*_KEY_FILE` vars at each container's `config.xml`
+(e.g. `homelab/config/radarr/config.xml`) and `OIKOS_JF_KEY_FILE` at the `jf.key`
+that `stack-setup.py` / `jellyfin-setup.sh` writes.
 
 The launchers in [`hub/scripts/`](hub/scripts/) (`run-ps2`, `run-n64`, `play-video`,
 `play-audio`, `stop-game`) are what the hub shells out to. Install them on `PATH`.
@@ -156,10 +167,19 @@ sudo systemctl enable --now console-hub
 [`homelab/bootstrap-arch.sh`](homelab/bootstrap-arch.sh) stands up everything under
 the hub. It installs deps, creates `/media` with the permissions hardlinks need,
 brings up the media stack ([`homelab/docker-compose.yml`](homelab/docker-compose.yml):
-Jellyfin, Radarr, Sonarr, Lidarr, Prowlarr, Bazarr, Jellyseerr, FlareSolverr,
-Navidrome), installs the hub + launchers as a service, and prints a checklist for
-the parts that can't be scripted (Tailscale login, indexers, quality profiles,
-Jellyfin libraries, Bazarr languages). It is idempotent; review it before running.
+Jellyfin, Transmission, Radarr, Sonarr, Lidarr, Prowlarr, Bazarr, Jellyseerr,
+FlareSolverr, Navidrome — **all in containers**, one shared `/media` mount so imports
+hardlink without remote-path-mapping), then runs
+[`homelab/stack-setup.py`](homelab/stack-setup.py) to wire it, and installs the hub +
+launchers as a service. It is idempotent; review it before running.
+
+**`stack-setup.py`** does the wiring deterministically over the APIs: the Jellyfin
+setup wizard + Movies/Shows libraries + an API key, Transmission's download-dir,
+each arr's root folder and Transmission download client (right category,
+remove-completed), and registers the arrs in Prowlarr. It leaves your choices to you
+(indexers — pass names like `stack-setup.py thepiratebay`; Bazarr provider account).
+[`jellyfin-setup.sh`](homelab/jellyfin-setup.sh) does just the Jellyfin part standalone.
+The 1080p cap is enforced by the hub (it requests the HD-1080p profile).
 
 That checklist is also written as an **agent prompt**:
 [`homelab/agent-config-prompt.md`](homelab/agent-config-prompt.md). Paste it to a
