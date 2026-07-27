@@ -991,6 +991,14 @@ body[data-screen] #deskkeys{flex:0 0 auto;padding-top:8px}   /* com a tela ligad
 #deskkeys button:active,#deskkeys button.on{background:var(--accent);color:#fff}
 #kbin{position:fixed;bottom:0;left:0;width:1px;height:1px;opacity:0;border:0;padding:0;
   resize:none;background:transparent;color:transparent;caret-color:transparent}
+#kbecho{position:fixed;top:0;left:0;right:0;z-index:9998;display:none;
+  background:#111;color:#eee;font:16px/1.4 monospace;padding:10px 14px;
+  border-bottom:2px solid var(--accent);white-space:pre-wrap;word-break:break-all;
+  min-height:20px;box-shadow:0 4px 12px rgba(0,0,0,.4)}
+#kbecho.on{display:block}
+#kbcaret{display:inline-block;width:2px;height:1.1em;background:var(--accent);
+  vertical-align:text-bottom;margin-left:1px;animation:kbblink 1s steps(1) infinite}
+@keyframes kbblink{50%{opacity:0}}
 </style></head><body>
 
 <div id=app>
@@ -1039,6 +1047,7 @@ body[data-screen] #deskkeys{flex:0 0 auto;padding-top:8px}   /* com a tela ligad
       </div>
     </div>
     <input id=kbin type=text inputmode=email autocomplete=off autocapitalize=off autocorrect=off spellcheck=false>
+    <div id=kbecho><span id=kbechot></span><span id=kbcaret></span></div>
   </div>
 </div>
 
@@ -1533,10 +1542,16 @@ window.addEventListener('click', goFullscreen);
   // --- teclado nativo do celular ---
   const kbin=document.getElementById('kbin');
   const kbt=document.getElementById('kbtoggle');
-  kbt.onclick=()=>{ if(document.activeElement===kbin){ kbin.blur(); kbt.classList.remove('on'); }
-    else { kbin.focus(); kbt.classList.add('on'); } };
-  kbin.addEventListener('blur',()=>kbt.classList.remove('on'));
-  tpad.addEventListener('dblclick',()=>kbin.focus());
+  const kbecho=document.getElementById('kbecho'), kbechot=document.getElementById('kbechot');
+  // eco = o proprio value do campo (sem buffer paralelo que desincroniza)
+  const showEcho=()=>{ kbechot.textContent=(kbin.value||'').slice(-48); };
+  // visibilidade da barra controlada SO aqui (nao em focus/blur: no Android eles
+  // disparam espurios com a predicao e faziam a barra piscar).
+  const openKb=()=>{ kbin.value=''; kblast=''; showEcho();
+    kbecho.classList.add('on'); kbt.classList.add('on'); kbin.focus(); };
+  const closeKb=()=>{ kbin.blur(); kbecho.classList.remove('on'); kbt.classList.remove('on'); };
+  kbt.onclick=()=>{ kbt.classList.contains('on')?closeKb():openKb(); };
+  tpad.addEventListener('dblclick',openKb);
   // captura por DIFF no evento 'input' (todo teclado Android dispara input;
   // beforeinput/keydown nem sempre, ex.: teclado AOSP do LineageOS)
   // DIFF no value: inputmode=email da teclado sem predicao (letras caem na hora),
@@ -1546,15 +1561,19 @@ window.addEventListener('click', goFullscreen);
     const cur=kbin.value||'';
     let p=0; const m=Math.min(cur.length,kblast.length);
     while(p<m && cur[p]===kblast[p]) p++;
-    for(let i=0;i<kblast.length-p;i++) key({key:'backspace'});   // apagados
+    const dele=kblast.length-p, ins=cur.slice(p);
+    for(let i=0;i<dele;i++) key({key:'backspace'});             // apagados
     let sent=false;
-    for(const ch of cur.slice(p)){ key({char:ch,mods:activeMods()}); sent=true; } // inseridos
+    for(const ch of ins){ key({char:ch,mods:activeMods()}); sent=true; } // inseridos
     if(sent) clearMods();
     kblast=cur;
     if(cur.length>160){ kbin.value=''; kblast=''; }              // nao cresce sem fim
+    showEcho();                                                  // eco = value atual
   });
   kbin.addEventListener('keydown',ev=>{const m={Enter:'enter',Backspace:'backspace',Tab:'tab',Escape:'esc',ArrowUp:'up',ArrowDown:'down',ArrowLeft:'left',ArrowRight:'right'};
-    if(m[ev.key]){ev.preventDefault();key({key:m[ev.key],mods:activeMods()});clearMods();}});
+    if(m[ev.key]){ev.preventDefault();key({key:m[ev.key],mods:activeMods()});clearMods();
+      if(ev.key==='Enter'){ kbin.value=''; kblast=''; }          // Enter = manda e limpa a barra
+      showEcho();}});
   // --- teclas especiais + modificadores ---
   for(const b of document.querySelectorAll('#deskkeys button[data-key]')){const k=b.dataset.key;
     b.onclick=()=>{buzz();key({key:k,mods:activeMods()});clearMods();};}
