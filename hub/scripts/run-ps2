@@ -7,6 +7,6 @@ export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run/user/1000}"
 export QT_QPA_PLATFORM=wayland
 BIN="${PCSX2:-pcsx2-qt}"
 case "$BIN" in
-  *.AppImage) exec "$BIN" --appimage-extract-and-run "$@" &> /tmp/pcsx2.log ;;
-  *)          exec "$BIN" "$@" &> /tmp/pcsx2.log ;;
+  *.AppImage) exec "$BIN" --appimage-extract-and-run -fullscreen "$@" &> /tmp/pcsx2.log ;;
+  *)          exec "$BIN" -fullscreen "$@" &> /tmp/pcsx2.log ;;
 esac

@@ -59,8 +59,12 @@ automatically on `.AppImage`). Then:
 - **Renderer:** Vulkan (`Renderer = 14`), native 1x upscale, vsync off, in
   `~/.config/PCSX2/inis/PCSX2.ini`. There is headroom for 2x (a real game measured
   at 28% CPU / 74C here), raise it if you want.
-- **Controller:** works out of the box (SDL sees the virtual pad as a DualShock).
-  For two players add a `[Pad2]` section bound to `SDL-1`.
+- **Controller:** PCSX2 needs SDL pad bindings for the hub's virtual gamepad, or the
+  phone does nothing. Append [`PCSX2-pad.ini`](PCSX2-pad.ini) to
+  `~/.config/PCSX2/inis/PCSX2.ini` **with PCSX2 closed** (it rewrites the ini on exit):
+  it enables the SDL input source and binds `Pad1 -> SDL-0`, `Pad2 -> SDL-1` (the two
+  virtual pads). The pads must already exist when PCSX2 starts, so the hub launches it.
+- **Fullscreen:** `run-ps2` passes `-fullscreen`.
 - **Memory card:** add a `[MemoryCards]` section pointing
   `Slot1_Filename = Mcd001.ps2`, or games report "unformatted". Format it from the
   console's Browser: launch the BIOS with **no** game (`run-ps2 -bios`). Launching
