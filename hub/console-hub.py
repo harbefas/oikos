@@ -1536,11 +1536,22 @@ window.addEventListener('click', goFullscreen);
     else { kbin.focus(); kbt.classList.add('on'); } };
   kbin.addEventListener('blur',()=>kbt.classList.remove('on'));
   tpad.addEventListener('dblclick',()=>kbin.focus());
-  kbin.addEventListener('beforeinput',ev=>{
-    if(ev.inputType==='insertText'&&ev.data){for(const ch of ev.data)key({char:ch,mods:activeMods()});clearMods();}
-    else if(ev.inputType==='deleteContentBackward')key({key:'backspace'});
-    else if(ev.inputType==='insertLineBreak'||ev.inputType==='insertParagraph')key({key:'enter'});
-    ev.preventDefault();kbin.textContent='';});
+  // captura por DIFF no evento 'input' (todo teclado Android dispara input;
+  // beforeinput/keydown nem sempre, ex.: teclado AOSP do LineageOS)
+  let kblast='';
+  kbin.addEventListener('input',()=>{
+    const cur=kbin.textContent||'';
+    let p=0; const m=Math.min(cur.length,kblast.length);
+    while(p<m && cur[p]===kblast[p]) p++;
+    for(let i=0;i<kblast.length-p;i++) key({key:'backspace'});   // apagados
+    let sent=false;
+    for(const ch of cur.slice(p)){                               // inseridos
+      if(ch==='\n') key({key:'enter'}); else { key({char:ch,mods:activeMods()}); sent=true; }
+    }
+    if(sent) clearMods();
+    kblast=cur;
+    if(cur.length>160){ kbin.textContent=''; kblast=''; }        // nao deixa crescer sem fim
+  });
   kbin.addEventListener('keydown',ev=>{const m={Enter:'enter',Backspace:'backspace',Tab:'tab',Escape:'esc',ArrowUp:'up',ArrowDown:'down',ArrowLeft:'left',ArrowRight:'right'};
     if(m[ev.key]){ev.preventDefault();key({key:m[ev.key],mods:activeMods()});clearMods();}});
   // --- teclas especiais + modificadores ---
