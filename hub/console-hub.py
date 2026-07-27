@@ -989,7 +989,8 @@ body[data-screen] #deskscreen{display:flex}
 body[data-screen] #deskkeys{flex:0 0 auto;padding-top:8px}   /* com a tela ligada, ela ocupa o topo */
 #deskkeys button{background:var(--ui);color:var(--tx);border:0;border-radius:8px;padding:11px 15px;font:inherit;font-weight:600;min-width:46px}
 #deskkeys button:active,#deskkeys button.on{background:var(--accent);color:#fff}
-#kbin{position:fixed;bottom:-40px;left:0;width:1px;height:1px;opacity:0;border:0}
+#kbin{position:fixed;bottom:0;left:0;width:1px;height:1px;opacity:0;border:0;padding:0;
+  resize:none;background:transparent;color:transparent;caret-color:transparent}
 </style></head><body>
 
 <div id=app>
@@ -1037,7 +1038,7 @@ body[data-screen] #deskkeys{flex:0 0 auto;padding-top:8px}   /* com a tela ligad
         <div id=tpad>trackpad<br><small>arraste move · toque clica · 2 dedos rolar</small></div>
       </div>
     </div>
-    <div id=kbin contenteditable=true inputmode=text autocapitalize=off autocorrect=off spellcheck=false></div>
+    <textarea id=kbin inputmode=text autocomplete=off autocapitalize=off autocorrect=off spellcheck=false></textarea>
   </div>
 </div>
 
@@ -1540,7 +1541,7 @@ window.addEventListener('click', goFullscreen);
   // beforeinput/keydown nem sempre, ex.: teclado AOSP do LineageOS)
   let kblast='';
   kbin.addEventListener('input',()=>{
-    const cur=kbin.textContent||'';
+    const cur=kbin.value||'';
     let p=0; const m=Math.min(cur.length,kblast.length);
     while(p<m && cur[p]===kblast[p]) p++;
     for(let i=0;i<kblast.length-p;i++) key({key:'backspace'});   // apagados
@@ -1550,7 +1551,7 @@ window.addEventListener('click', goFullscreen);
     }
     if(sent) clearMods();
     kblast=cur;
-    if(cur.length>160){ kbin.textContent=''; kblast=''; }        // nao deixa crescer sem fim
+    if(cur.length>160){ kbin.value=''; kblast=''; }              // nao deixa crescer sem fim
   });
   kbin.addEventListener('keydown',ev=>{const m={Enter:'enter',Backspace:'backspace',Tab:'tab',Escape:'esc',ArrowUp:'up',ArrowDown:'down',ArrowLeft:'left',ArrowRight:'right'};
     if(m[ev.key]){ev.preventDefault();key({key:m[ev.key],mods:activeMods()});clearMods();}});
