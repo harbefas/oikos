@@ -1038,7 +1038,7 @@ body[data-screen] #deskkeys{flex:0 0 auto;padding-top:8px}   /* com a tela ligad
         <div id=tpad>trackpad<br><small>arraste move · toque clica · 2 dedos rolar</small></div>
       </div>
     </div>
-    <textarea id=kbin inputmode=text autocomplete=off autocapitalize=off autocorrect=off spellcheck=false></textarea>
+    <input id=kbin type=text inputmode=email autocomplete=off autocapitalize=off autocorrect=off spellcheck=false>
   </div>
 </div>
 
@@ -1539,6 +1539,8 @@ window.addEventListener('click', goFullscreen);
   tpad.addEventListener('dblclick',()=>kbin.focus());
   // captura por DIFF no evento 'input' (todo teclado Android dispara input;
   // beforeinput/keydown nem sempre, ex.: teclado AOSP do LineageOS)
+  // DIFF no value: inputmode=email da teclado sem predicao (letras caem na hora),
+  // type=text permite espaco, e o diff pega insercao E backspace (value encolhe).
   let kblast='';
   kbin.addEventListener('input',()=>{
     const cur=kbin.value||'';
@@ -1546,12 +1548,10 @@ window.addEventListener('click', goFullscreen);
     while(p<m && cur[p]===kblast[p]) p++;
     for(let i=0;i<kblast.length-p;i++) key({key:'backspace'});   // apagados
     let sent=false;
-    for(const ch of cur.slice(p)){                               // inseridos
-      if(ch==='\n') key({key:'enter'}); else { key({char:ch,mods:activeMods()}); sent=true; }
-    }
+    for(const ch of cur.slice(p)){ key({char:ch,mods:activeMods()}); sent=true; } // inseridos
     if(sent) clearMods();
     kblast=cur;
-    if(cur.length>160){ kbin.value=''; kblast=''; }              // nao deixa crescer sem fim
+    if(cur.length>160){ kbin.value=''; kblast=''; }              // nao cresce sem fim
   });
   kbin.addEventListener('keydown',ev=>{const m={Enter:'enter',Backspace:'backspace',Tab:'tab',Escape:'esc',ArrowUp:'up',ArrowDown:'down',ArrowLeft:'left',ArrowRight:'right'};
     if(m[ev.key]){ev.preventDefault();key({key:m[ev.key],mods:activeMods()});clearMods();}});
