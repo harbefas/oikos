@@ -385,8 +385,9 @@ def list_movies():
 
 def detail(iid):
     """Metadata rica de um item (filme/serie) do Jellyfin para a tela de detalhe."""
-    m = jf_get(f"/Items/{iid}?Fields=Overview,Genres,People,ProductionYear,"
-               f"RunTimeTicks,OfficialRating,CommunityRating,Path")
+    d = jf_get(f"/Items?Ids={iid}&Recursive=true&Fields=Overview,Genres,People,"
+               f"ProductionYear,RunTimeTicks,OfficialRating,CommunityRating,Path")
+    m = d["Items"][0]
     cast = [{"name": p["Name"], "role": p.get("Role", ""),
              "img": f"/jf/{p['Id']}" if p.get("PrimaryImageTag") else None}
             for p in m.get("People", []) if p.get("Type") == "Actor"][:12]
