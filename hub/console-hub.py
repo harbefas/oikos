@@ -207,6 +207,10 @@ SYSTEMS = {
     "n64": {"label": "N64",  "exts": (".n64", ".z64", ".v64"),  "cmd": "run-n64"},
     "gc":  {"label": "GameCube", "exts": (".iso", ".rvz", ".gcm", ".ciso"), "cmd": "run-gc"},
     "wii": {"label": "Wii",      "exts": (".iso", ".rvz", ".wbfs"),          "cmd": "run-gc"},
+    "psp": {"label": "PSP",  "exts": (".iso", ".cso", ".chd", ".pbp"),        "cmd": "run-psp"},
+    "ps1": {"label": "PS1",  "exts": (".cue", ".bin", ".chd", ".pbp", ".img"), "cmd": "run-ps1"},
+    "3ds": {"label": "3DS",  "exts": (".3ds", ".cci", ".cxi", ".cia", ".app"), "cmd": "run-3ds"},
+    "ds":  {"label": "DS",   "exts": (".nds",),                               "cmd": "run-ds"},
 }
 APPS = [
     {"id": "kodi",     "label": "Kodi",     "icon": "📺", "cmd": "kodi"},
