@@ -205,6 +205,8 @@ COVERS = f"{ROMS}/.covers"
 SYSTEMS = {
     "ps2": {"label": "PS2",  "exts": (".iso", ".chd", ".bin"), "cmd": "run-ps2"},
     "n64": {"label": "N64",  "exts": (".n64", ".z64", ".v64"),  "cmd": "run-n64"},
+    "gc":  {"label": "GameCube", "exts": (".iso", ".rvz", ".gcm", ".ciso"), "cmd": "run-gc"},
+    "wii": {"label": "Wii",      "exts": (".iso", ".rvz", ".wbfs"),          "cmd": "run-gc"},
 }
 APPS = [
     {"id": "kodi",     "label": "Kodi",     "icon": "📺", "cmd": "kodi"},

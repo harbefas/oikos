@@ -1,0 +1,8 @@
+#!/bin/bash
+# Lanca o Dolphin (GameCube/Wii) na sessao grafica. Sem WAYLAND_DISPLAY o Qt abre
+# em display "null" (tela preta). -b: boot direto e fecha ao sair do jogo.
+# -C forca fullscreen sem depender do Dolphin.ini.
+export WAYLAND_DISPLAY="${WAYLAND_DISPLAY:-wayland-1}"
+export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run/user/1000}"
+export QT_QPA_PLATFORM=wayland
+exec dolphin-emu -b -C "Dolphin.Display.Fullscreen=True" -e "$1" &> /tmp/dolphin.log
