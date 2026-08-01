@@ -411,6 +411,45 @@ def list_series():
             for s in d["Items"]]
 
 
+RAWG_KEY = os.environ.get("OIKOS_RAWG_KEY", "").strip()
+
+
+def _clean_game_name(n):
+    n = re.sub(r"[\(\[].*?[\)\]]", "", n)                      # tira (USA), [!], (Bonus)
+    n = re.sub(r"\b(USA|Europe|Japan|Rev \d+|Disc \d+|v\d[\d.]*)\b", "", n, flags=re.I)
+    n = re.sub(r"\bwww\.[^ ]+", "", n)                          # lixo de nome de release
+    return re.sub(r"\s+", " ", n).strip(" -_.")
+
+
+def game_detail(name, system):
+    """Metadata de jogo via RAWG (chave em OIKOS_RAWG_KEY). Sem chave -> so o nome."""
+    if not RAWG_KEY:
+        return {"name": name, "type": "game"}
+    q = _clean_game_name(name) or name
+    s = json.load(urllib.request.urlopen(
+        f"https://api.rawg.io/api/games?key={RAWG_KEY}"
+        f"&search={urllib.parse.quote(q)}&page_size=1", timeout=15))
+    res = s.get("results") or []
+    if not res:
+        return {"name": name, "type": "game"}
+    g = res[0]
+    out = {"name": name, "type": "game",
+           "year": (g.get("released") or "")[:4] or None,
+           "rating": g.get("rating") or None,
+           "genres": [x["name"] for x in g.get("genres", [])],
+           "backdrop": g.get("background_image"),
+           "shots": [x["image"] for x in (g.get("short_screenshots") or [])
+                     if x.get("image")][:10],
+           "overview": ""}
+    try:
+        gd = json.load(urllib.request.urlopen(
+            f"https://api.rawg.io/api/games/{g['id']}?key={RAWG_KEY}", timeout=15))
+        out["overview"] = (gd.get("description_raw") or "")[:700]
+    except Exception:
+        pass
+    return out
+
+
 RADARR = "http://localhost:7878/api/v3"
 try:
     RADARR_KEY = os.environ.get("OIKOS_RADARR_KEY", "").strip()
@@ -719,6 +758,9 @@ body[data-inpad="1"] #tabgrip{display:none}
   display:flex;align-items:center;justify-content:center;font-size:28px}
 .dt-cn{font-size:11px;font-weight:600;margin-top:5px;line-height:1.2}
 .dt-cr{font-size:10px;opacity:.55;line-height:1.2}
+.dt-poster.nf,.dt-face.nf{display:flex;align-items:center;justify-content:center;font-size:34px}
+.dt-shots{display:flex;gap:10px;overflow-x:auto;padding-bottom:6px}
+.dt-shot{flex:0 0 200px;height:112px;border-radius:8px;background:#222 center/cover no-repeat}
 /* apps */
 #apps{padding:16px;display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:14px}
 .app{background:#1b1f28;border:1px solid #262b36;border-radius:12px;padding:22px 14px;
@@ -1284,9 +1326,31 @@ async function loadGames(){
     const c=document.createElement('div'); c.className='card';
     const cov = game.cover ? `background-image:url(${game.cover})` : '';
     c.innerHTML=`<div class=cov style="${cov}">${game.cover?'':'🎮'}</div><div class=nm>${game.name}</div><div class=sys>${game.label}</div>`;
-    c.onclick=()=>launch(game);
+    c.onclick=()=>openGameDetail(game);
     el.appendChild(c);
   }
+}
+async function openGameDetail(game){
+  window._dtGame=game;
+  const ov=document.getElementById('detail');
+  document.getElementById('dt-hero').style.backgroundImage='';
+  document.getElementById('dt-body').innerHTML='<div style="padding:40px;text-align:center;opacity:.5">carregando…</div>';
+  ov.classList.add('on'); ov.scrollTop=0;
+  const d=await fetch('/api/gamedetail?name='+encodeURIComponent(game.name)+'&system='+encodeURIComponent(game.system)).then(r=>r.json()).catch(()=>({name:game.name}));
+  if(d.backdrop) document.getElementById('dt-hero').style.backgroundImage=`linear-gradient(180deg,#10141cbb,#10141c),url(${d.backdrop})`;
+  const meta=[d.year,game.label,d.rating?'⭐ '+Number(d.rating).toFixed(1):''].filter(Boolean).join('  ·  ');
+  const genres=(d.genres||[]).slice(0,4).join(' · ');
+  const posterImg=game.cover?`<div class=dt-poster style="background-image:url(${game.cover})"></div>`:'<div class="dt-poster nf">🎮</div>';
+  const shots=(d.shots||[]).map(s=>`<div class=dt-shot style="background-image:url(${s})"></div>`).join('');
+  document.getElementById('dt-body').innerHTML=`
+    <div class=dt-top>${posterImg}<div class=dt-head>
+      <div class=dt-title>${d.name||game.name}</div>
+      <div class=dt-meta>${meta}</div>
+      ${genres?`<div class=dt-gen>${genres}</div>`:''}
+      <button class=dt-play onclick="closeDetail();launch(window._dtGame)">▶ Jogar</button>
+    </div></div>
+    ${d.overview?`<div class=dt-ov>${d.overview}</div>`:''}
+    ${shots?`<div class=dt-sec>Screenshots</div><div class=dt-shots>${shots}</div>`:''}`;
 }
 async function loadRecent(){
   const r=await fetch('/api/recent').then(x=>x.json()).catch(()=>[]);
@@ -1661,6 +1725,14 @@ class Handler(BaseHTTPRequestHandler):
                 self._json(detail(iid))
             except Exception:
                 self._json({})
+        elif path == "/api/gamedetail":
+            qs = parse_qs(urlparse(self.path).query)
+            nm = qs.get("name", [""])[0]
+            sysn = qs.get("system", [""])[0]
+            try:
+                self._json(game_detail(nm, sysn))
+            except Exception:
+                self._json({"name": nm, "type": "game"})
         elif path.startswith("/jfbd/"):
             iid = path[len("/jfbd/"):]
             try:
