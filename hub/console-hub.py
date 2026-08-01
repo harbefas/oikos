@@ -211,6 +211,7 @@ SYSTEMS = {
     "ps1": {"label": "PS1",  "exts": (".cue", ".bin", ".chd", ".pbp", ".img"), "cmd": "run-ps1"},
     "3ds": {"label": "3DS",  "exts": (".3ds", ".cci", ".cxi", ".cia", ".app"), "cmd": "run-3ds"},
     "ds":  {"label": "DS",   "exts": (".nds",),                               "cmd": "run-ds"},
+    "xbox": {"label": "Xbox", "exts": (".iso", ".xiso"),                      "cmd": "run-xbox"},
 }
 APPS = [
     {"id": "kodi",     "label": "Kodi",     "icon": "📺", "cmd": "kodi"},
