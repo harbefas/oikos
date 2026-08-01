@@ -378,9 +378,29 @@ def jf_get(path):
 
 def list_movies():
     d = jf_get("/Items?IncludeItemTypes=Movie&Recursive=true&SortBy=SortName&Fields=Path")
-    return [{"name": m["Name"], "path": m.get("Path"),
+    return [{"name": m["Name"], "path": m.get("Path"), "id": m["Id"],
              "cover": f"/jf/{m['Id']}" if "Primary" in m.get("ImageTags", {}) else None}
             for m in d["Items"] if m.get("Path")]
+
+
+def detail(iid):
+    """Metadata rica de um item (filme/serie) do Jellyfin para a tela de detalhe."""
+    m = jf_get(f"/Items/{iid}?Fields=Overview,Genres,People,ProductionYear,"
+               f"RunTimeTicks,OfficialRating,CommunityRating,Path")
+    cast = [{"name": p["Name"], "role": p.get("Role", ""),
+             "img": f"/jf/{p['Id']}" if p.get("PrimaryImageTag") else None}
+            for p in m.get("People", []) if p.get("Type") == "Actor"][:12]
+    rt = m.get("RunTimeTicks")
+    cr = m.get("CommunityRating")
+    return {"id": m["Id"], "name": m["Name"], "type": m.get("Type"),
+            "overview": m.get("Overview", ""), "genres": m.get("Genres", []),
+            "year": m.get("ProductionYear"),
+            "runtime": round(rt / 600000000) if rt else None,   # ticks -> minutos
+            "rating": round(cr, 1) if cr else None,
+            "official": m.get("OfficialRating"),
+            "cover": f"/jf/{iid}" if "Primary" in m.get("ImageTags", {}) else None,
+            "backdrop": f"/jfbd/{iid}" if m.get("BackdropImageTags") else None,
+            "path": m.get("Path"), "cast": cast}
 
 
 def list_series():
@@ -672,6 +692,32 @@ body[data-inpad="1"] #tabgrip{display:none}
 #eps{overflow-y:auto;padding:8px 14px 20px}
 .ep{padding:14px 12px;border-bottom:1px solid #1e232c;font-size:14px}
 .ep:active{background:#1b2130}
+/* tela de detalhe (filme/serie) */
+#detail{position:fixed;inset:0;background:#10141c;z-index:25;display:none;overflow-y:auto;-webkit-overflow-scrolling:touch}
+#detail.on{display:block}
+#dt-hero{height:210px;background:#181d27 center/cover no-repeat}
+#dt-close{position:fixed;top:12px;right:12px;z-index:2;background:#000a;backdrop-filter:blur(6px);
+  border:0;color:#fff;width:38px;height:38px;border-radius:50%;font-size:17px}
+#dt-body{padding:0 16px 40px;margin-top:-72px;position:relative}
+.dt-top{display:flex;gap:14px;align-items:flex-end}
+.dt-poster{width:96px;height:144px;flex:0 0 96px;border-radius:10px;
+  background:#222 center/cover no-repeat;box-shadow:0 4px 14px #0009}
+.dt-head{flex:1;padding-bottom:4px;min-width:0}
+.dt-title{font-size:19px;font-weight:700;line-height:1.2}
+.dt-meta{font-size:12.5px;opacity:.8;margin-top:6px}
+.dt-gen{font-size:12px;opacity:.6;margin-top:3px}
+.dt-play{margin-top:10px;background:#4f8cff;border:0;color:#fff;padding:10px 18px;
+  border-radius:10px;font:inherit;font-weight:600;font-size:14px}
+.dt-play:active{background:#3d6fd0}
+.dt-ov{margin-top:16px;font-size:13.5px;line-height:1.55;opacity:.9}
+.dt-sec{margin:20px 0 10px;font-size:12px;font-weight:700;opacity:.6;
+  text-transform:uppercase;letter-spacing:.5px}
+.dt-castrow{display:flex;gap:12px;overflow-x:auto;padding-bottom:6px}
+.dt-cast{flex:0 0 72px;text-align:center}
+.dt-face{width:72px;height:72px;border-radius:50%;background:#222 center/cover no-repeat;
+  display:flex;align-items:center;justify-content:center;font-size:28px}
+.dt-cn{font-size:11px;font-weight:600;margin-top:5px;line-height:1.2}
+.dt-cr{font-size:10px;opacity:.55;line-height:1.2}
 /* apps */
 #apps{padding:16px;display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:14px}
 .app{background:#1b1f28;border:1px solid #262b36;border-radius:12px;padding:22px 14px;
@@ -910,6 +956,7 @@ body[data-p="2"] #pnum{color:var(--p2)}
 </div>
 
 <div id=eplist><div id=ephead><span id=eptitle></span><button onclick="closeEps()">✕</button></div><div id=eps></div></div>
+<div id=detail><button id=dt-close onclick="closeDetail()">✕</button><div id=dt-hero></div><div id=dt-body></div></div>
 <button id=dlbtn onclick="openDl()">📥<span id=dlbadge></span></button>
 <div id=dllist><div id=ephead style="border-bottom:1px solid #262b36"><span>Downloads</span><button onclick="closeDl()">✕</button></div><div id=dls></div></div>
 <div id=toast></div>
@@ -1074,7 +1121,7 @@ async function loadMovies(){
   const m=await fetch('/api/movies').then(r=>r.json()).catch(()=>[]);
   const el=document.getElementById('movies'); el.innerHTML='';
   if(!m.length){el.innerHTML='<div style="padding:20px;opacity:.5">nenhum filme</div>';return;}
-  for(const mv of m) el.appendChild(posterCard(mv, ()=>play(mv.path,'movie',mv.cover)));
+  for(const mv of m) el.appendChild(posterCard(mv, ()=>openDetail(mv.id,'movie',mv.cover,mv.path)));
 }
 async function loadResume(){
   const r=await fetch('/api/resume').then(x=>x.json()).catch(()=>[]);
@@ -1165,7 +1212,7 @@ async function loadSeries(){
   const s=await fetch('/api/series').then(r=>r.json()).catch(()=>[]);
   const el=document.getElementById('series'); el.innerHTML='';
   if(!s.length){el.innerHTML='<div style="padding:20px;opacity:.5">nenhuma série</div>';return;}
-  for(const sr of s) el.appendChild(posterCard(sr, ()=>openEps(sr)));
+  for(const sr of s) el.appendChild(posterCard(sr, ()=>openDetail(sr.id,'series',sr.cover)));
 }
 async function openEps(series){
   document.getElementById('eptitle').textContent=series.name;
@@ -1181,6 +1228,38 @@ async function openEps(series){
   });
 }
 function closeEps(){document.getElementById('eplist').classList.remove('on');}
+async function openDetail(id, kind, cover, moviePath){
+  const ov=document.getElementById('detail');
+  document.getElementById('dt-hero').style.backgroundImage='';
+  document.getElementById('dt-body').innerHTML='<div style="padding:40px;text-align:center;opacity:.5">carregando…</div>';
+  ov.classList.add('on'); ov.scrollTop=0;
+  const d=await fetch('/api/detail?id='+encodeURIComponent(id)).then(r=>r.json()).catch(()=>({}));
+  if(d.backdrop) document.getElementById('dt-hero').style.backgroundImage=`linear-gradient(180deg,#10141cbb,#10141c),url(${d.backdrop})`;
+  const meta=[d.year,d.runtime?d.runtime+' min':'',d.official,d.rating?'⭐ '+d.rating:''].filter(Boolean).join('  ·  ');
+  const genres=(d.genres||[]).slice(0,4).join(' · ');
+  const posterImg=(d.cover||cover)?`<div class=dt-poster style="background-image:url(${d.cover||cover})"></div>`:'';
+  const cast=(d.cast||[]).map(c=>`<div class=dt-cast>${c.img?`<div class=dt-face style="background-image:url(${c.img})"></div>`:'<div class="dt-face nf">👤</div>'}<div class=dt-cn>${c.name}</div>${c.role?`<div class=dt-cr>${c.role}</div>`:''}</div>`).join('');
+  const action = kind==='movie'
+    ? `<button class=dt-play onclick='closeDetail();play(${JSON.stringify(d.path||moviePath)},"movie",${JSON.stringify(d.cover||cover||null)})'>▶ Assistir</button>` : '';
+  document.getElementById('dt-body').innerHTML=`
+    <div class=dt-top>${posterImg}<div class=dt-head>
+      <div class=dt-title>${d.name||''}</div>
+      <div class=dt-meta>${meta}</div>
+      ${genres?`<div class=dt-gen>${genres}</div>`:''}
+      ${action}
+    </div></div>
+    ${d.overview?`<div class=dt-ov>${d.overview}</div>`:''}
+    ${cast?`<div class=dt-sec>Elenco</div><div class=dt-castrow>${cast}</div>`:''}
+    ${kind==='series'?'<div class=dt-sec>Episódios</div><div id=dt-eps></div>':''}`;
+  if(kind==='series'){
+    const eps=await fetch('/api/episodes?id='+encodeURIComponent(id)).then(r=>r.json()).catch(()=>[]);
+    const box=document.getElementById('dt-eps'); box.innerHTML='';
+    if(!eps.length){box.innerHTML='<div style="opacity:.5">sem episódios</div>';}
+    eps.forEach((ep,i)=>{const e=document.createElement('div');e.className='ep';e.textContent=ep.name;
+      e.onclick=()=>{closeDetail();play(eps.slice(i).map(x=>x.path),'series',d.cover||cover);};box.appendChild(e);});
+  }
+}
+function closeDetail(){document.getElementById('detail').classList.remove('on');}
 async function play(pathOrList, kind, cover){
   const body = Array.isArray(pathOrList) ? {paths:pathOrList,kind,cover} : {path:pathOrList,kind,cover};
   await fetch('/api/play',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
@@ -1574,6 +1653,26 @@ class Handler(BaseHTTPRequestHandler):
                 self._json(list_episodes(sid))
             except Exception:
                 self._json([])
+        elif path == "/api/detail":
+            qs = parse_qs(urlparse(self.path).query)
+            iid = qs.get("id", [""])[0]
+            try:
+                self._json(detail(iid))
+            except Exception:
+                self._json({})
+        elif path.startswith("/jfbd/"):
+            iid = path[len("/jfbd/"):]
+            try:
+                url = f"{JF}/Items/{iid}/Images/Backdrop/0?maxWidth=1280&api_key={JF_KEY}"
+                data = urllib.request.urlopen(url, timeout=15).read()
+                self.send_response(200)
+                self.send_header("Content-Type", "image/jpeg")
+                self.send_header("Cache-Control", "max-age=86400")
+                self.send_header("Content-Length", str(len(data)))
+                self.end_headers()
+                self.wfile.write(data)
+            except Exception:
+                self.send_response(404); self.end_headers()
         elif path.startswith("/jf/"):
             iid = path[4:]
             try:
