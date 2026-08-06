@@ -287,7 +287,9 @@ def list_games():
 
 
 # --- jogos de PC via Steam (celular vira o controle pelo gamepad uinput) ---
-STEAM_ROOT = os.environ.get("OIKOS_STEAM", os.path.expanduser("~/.local/share/Steam"))
+# OIKOS_HOME = home do usuario dono do Steam (importa quando o hub roda como root).
+_STEAM_HOME = os.environ.get("OIKOS_HOME", os.path.expanduser("~"))
+STEAM_ROOT = os.environ.get("OIKOS_STEAM", os.path.join(_STEAM_HOME, ".local/share/Steam"))
 STEAM_SKIP = {"228980", "1070560", "1391110", "1493710", "1628350", "1826330",
               "1887720", "2180100", "2348590"}  # Proton / Steam Linux Runtime / redistribs
 
@@ -305,7 +307,7 @@ def _steam_libs():
 
 
 def _steam_cover(appid):
-    for base in (STEAM_ROOT, os.path.expanduser("~/.steam/steam")):
+    for base in (STEAM_ROOT, os.path.join(_STEAM_HOME, ".steam/steam")):
         p = os.path.join(base, "appcache", "librarycache", appid, "library_600x900.jpg")
         if os.path.exists(p):
             return p

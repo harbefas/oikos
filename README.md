@@ -116,10 +116,13 @@ variables, so you can override them in the systemd unit without editing code:
 | Login password | *(none)* | `PASSWORD` | `OIKOS_PASSWORD` |
 | Auth token | *(none)* | `TOKEN` | `OIKOS_TOKEN` |
 | mpv user home | *(current user)* | — | `OIKOS_HOME` |
+| Steam library | `<OIKOS_HOME>/.local/share/Steam` | `STEAM_ROOT` | `OIKOS_STEAM` |
 
 `OIKOS_HOME` only matters if the hub runs as a different user than mpv (e.g. the hub
 as root, mpv as your desktop user): point it at that user's home so "continue
-watching" can find mpv's saved positions. "See the TV" needs `grim` and reads the
+watching" can find mpv's saved positions and the Steam library resolves under it
+(otherwise a root-run hub looks in `/root` and lists no Steam games). Set `OIKOS_STEAM`
+directly if Steam lives outside that home. "See the TV" needs `grim` and reads the
 Sway session on `WAYLAND_DISPLAY=wayland-1`, `XDG_RUNTIME_DIR=/run/user/1000`.
 
 API keys are **never hardcoded** — pass them or point at a file, per service:
