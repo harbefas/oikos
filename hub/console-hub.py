@@ -130,29 +130,49 @@ def list_resume(n=12):
 MUSIC = os.environ.get("OIKOS_MUSIC", f"{MEDIA}/music")
 
 
-def list_albums():
-    albums = []
+def extract_embedded_cover(path, audio_files):
+    """Sem cover.jpg na pasta: tenta puxar a arte embutida no primeiro arquivo de audio."""
+    src = os.path.join(path, sorted(audio_files)[0])
+    dest = os.path.join(path, "cover.jpg")
+    try:
+        subprocess.run(["ffmpeg", "-y", "-i", src, "-an", "-update", "1", "-frames:v", "1", dest],
+                       capture_output=True, timeout=15)
+    except Exception:
+        return None
+    if os.path.exists(dest) and os.path.getsize(dest) > 0:
+        return dest
+    return None
+
+
+def list_artists():
+    artists = []
     if not os.path.isdir(MUSIC):
-        return albums
+        return artists
     for artist in sorted(os.listdir(MUSIC)):
         apath = os.path.join(MUSIC, artist)
         if not os.path.isdir(apath):
             continue
-        # cada subpasta = album; se nao houver, o proprio artista vira "album"
+        # cada subpasta = album; se nao houver, o proprio artista vira "album" unico
         subs = [d for d in sorted(os.listdir(apath))
                 if os.path.isdir(os.path.join(apath, d))]
-        targets = [(f"{artist} — {d}", os.path.join(apath, d)) for d in subs] or [(artist, apath)]
+        targets = [(d, os.path.join(apath, d)) for d in subs] or [(artist, apath)]
+        albums = []
         for name, path in targets:
-            has_audio = any(f.lower().endswith((".flac", ".mp3", ".m4a", ".ogg", ".opus"))
-                            for f in os.listdir(path))
-            if not has_audio:
+            audio_files = [f for f in os.listdir(path)
+                           if f.lower().endswith((".flac", ".mp3", ".m4a", ".ogg", ".opus"))]
+            if not audio_files:
                 continue
             cover = next((os.path.join(path, c) for c in
                           ("cover.jpg", "folder.jpg", "cover.png", "front.jpg")
                           if os.path.exists(os.path.join(path, c))), None)
-            albums.append({"name": name, "path": path,
-                           "cover": f"/acover/{urllib.parse.quote(path)}" if cover else None})
-    return albums
+            if not cover:
+                cover = extract_embedded_cover(path, audio_files)
+            cover_url = (f"/acover/{urllib.parse.quote(path)}?t={int(os.path.getmtime(cover))}"
+                         if cover else None)
+            albums.append({"name": name, "path": path, "cover": cover_url})
+        if albums:
+            artists.append({"name": artist, "cover": albums[0]["cover"], "albums": albums})
+    return artists
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from evdev import UInput, AbsInfo, ecodes as e
 
@@ -188,7 +208,7 @@ def make_icon(size=512):
 ICON_PNG = make_icon()
 MANIFEST = json.dumps({
     "name": "Oikos", "short_name": "Oikos",
-    "start_url": "/", "display": "fullscreen", "orientation": "landscape",
+    "start_url": "/", "display": "fullscreen",
     "background_color": "#282d1c", "theme_color": "#282d1c",
     "icons": [
         {"src": "/icon.png", "sizes": "512x512", "type": "image/png"},
@@ -1101,7 +1121,7 @@ function showTab(t){
   document.getElementById('app').style.display = pad ? 'none' : 'block';
   for(const k of TABS) views[k].classList.toggle('on', k===t);
   views.pad.classList.toggle('on', pad);
-  if(pad){ hideTabs(); keepAwake(); refreshStatus(); lockLandscape(); }
+  if(pad){ hideTabs(); keepAwake(); refreshStatus(); }
   else { showTabs(); unlockOrient(); }   // gamepad = sempre landscape; resto solta a orientacao
   if(t==='movies' && !loaded.movies){ loaded.movies=1; loadMovies(); }
   if(t==='series' && !loaded.series){ loaded.series=1; loadSeries(); }
@@ -1130,10 +1150,23 @@ async function loadMusic(){
   const a=await fetch('/api/albums').then(r=>r.json()).catch(()=>[]);
   const el=document.getElementById('music'); el.innerHTML='';
   if(!a.length){el.innerHTML='<div style="padding:20px;opacity:.5">nenhum álbum</div>';return;}
-  for(const al of a){
-    const c=posterCard(al, ()=>play(al.path,'music',al.cover));
-    c.querySelector('.pc').textContent = al.cover?'':'🎵';
+  for(const ar of a){
+    const onclick = ar.albums.length>1
+      ? ()=>openAlbums(ar)
+      : ()=>play(ar.albums[0].path,'music',ar.albums[0].cover);
+    const c=posterCard(ar, onclick);
+    c.querySelector('.pc').textContent = ar.cover?'':'🎵';
     el.appendChild(c);
+  }
+}
+function openAlbums(artist){
+  document.getElementById('eptitle').textContent=artist.name;
+  const box=document.getElementById('eps'); box.innerHTML='';
+  document.getElementById('eplist').classList.add('on');
+  for(const al of artist.albums){
+    const d=document.createElement('div'); d.className='ep'; d.textContent=al.name;
+    d.onclick=()=>{closeEps();play(al.path,'music',al.cover);};
+    box.appendChild(d);
   }
 }
 
@@ -1399,6 +1432,9 @@ async function refreshStatus(){
   const s = await fetch('/api/status').then(r=>r.json()).catch(()=>({running:false}));
   const mp=document.getElementById('miniplayer');
   document.body.dataset.mode = s.kind==='media' ? 'media' : 'game';
+  if(document.body.dataset.inpad==='1'){
+    if(document.body.dataset.mode==='media') unlockOrient(); else lockLandscape();
+  }
   if(!s.running){ mp.classList.remove('on'); return; }
   mp.classList.add('on');
   const art=document.getElementById('mp-art'), pp=document.getElementById('mp-pp');
@@ -1672,7 +1708,7 @@ class Handler(BaseHTTPRequestHandler):
                 self._json([])
         elif path == "/api/albums":
             try:
-                self._json(list_albums())
+                self._json(list_artists())
             except Exception:
                 self._json([])
         elif path == "/api/search":
