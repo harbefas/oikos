@@ -73,9 +73,14 @@ Base URLs from the host: `http://localhost:PORT`. Radarr/Sonarr/Lidarr are API v
    create a Languages Profile with it, set it as the movie/series default, and add a
    provider (ask the human for the account). This repo pins Bazarr **1.5.1** on purpose.
 4. **Console Hub.** `sudo systemctl start console-hub`; confirm
-   `curl -s localhost:8100/api/games` and `/api/movies` return JSON. (The 1080p cap is
+   `curl -s localhost:8100/api/games`, `/api/movies` and `/api/downloads` return JSON,
+   and `curl -s -o /dev/null -w '%{http_code}' localhost:8100/home` is `200` (the TV
+   Home Screen — no login required on that route by design). (The 1080p cap is
    automatic — the hub requests the HD-1080p profile.)
-5. **Optional.** `tailscale up` for outside access; enable Jellyfin VAAPI in its dashboard.
+5. **Optional.** `tailscale up` for outside access; enable Jellyfin VAAPI in its
+   dashboard; add the Home Screen kiosk to the compositor's autostart (ask the human
+   if they want it — it's a Sway/Hyprland config line, see README.md#home-screen,
+   not something to guess a path for).
 
 ## Report at the end
 

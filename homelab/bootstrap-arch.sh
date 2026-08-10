@@ -6,6 +6,7 @@
 #   - Tailscale login (interactive), Sway autologin, emulator install (AUR)
 #   - arr API keys / indexers / quality profiles (set in each web UI)
 #   - Jellyfin libraries, Bazarr languages (3 screens)
+#   - Home Screen kiosk autostart on the TV (optional, one line in the compositor config)
 # A checklist for all of that prints at the end.
 #
 # Untested end to end (the author's box is already set up). Reads defensively;
@@ -82,6 +83,7 @@ User=$USER_NAME
 Environment=OIKOS_JF_KEY_FILE=$REPO_DIR/homelab/jf.key
 Environment=OIKOS_RADARR_KEY_FILE=$REPO_DIR/homelab/config/radarr/config.xml
 Environment=OIKOS_SONARR_KEY_FILE=$REPO_DIR/homelab/config/sonarr/config.xml
+Environment=OIKOS_LIDARR_KEY_FILE=$REPO_DIR/homelab/config/lidarr/config.xml
 Environment=OIKOS_HOME=/home/$USER_NAME
 ExecStart=/usr/bin/python3 /opt/console-hub/console-hub.py
 Restart=on-failure
@@ -110,5 +112,9 @@ cat <<EOF
      or the phone pad stays disabled (media/mouse/keyboard still work).
   8. Emulators: PS2 = pcsx2-latest-bin (AUR) + your own BIOS; see emulators/README.md.
      Games work without the arr stack.
+  9. Home Screen on the TV (optional): add the kiosk browser to your compositor's
+     autostart, e.g. in ~/.config/sway/config:
+       exec sh -c "sleep 3; librewolf --kiosk http://localhost:8100/home"
+     See README.md#home-screen for what it does and the timezone caveat.
 
 EOF
