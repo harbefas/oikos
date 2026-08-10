@@ -22,7 +22,7 @@ MEDIA = os.environ.get("OIKOS_MEDIA", "/media")
 TOKEN = os.environ.get("OIKOS_TOKEN", "")
 PASSWORD = os.environ.get("OIKOS_PASSWORD", "")
 PWHASH = hashlib.sha256(PASSWORD.encode()).hexdigest() if PASSWORD else ""
-STATE = {"cover": None, "mkind": None}   # do que esta tocando (setado no /api/play)
+STATE = {"cover": None, "mkind": None, "query": ""}   # cover/mkind: /api/play; query: teclado do celular -> busca na TV
 
 
 def mpv_cmd(command):
@@ -240,6 +240,7 @@ APPS = [
      "cmd": "librewolf --kiosk http://localhost:8096"},
     {"id": "navidrome", "label": "Música", "icon": "🎵",
      "cmd": "librewolf --kiosk http://localhost:4533"},
+    {"id": "spotify",  "label": "Spotify", "icon": "🎧", "cmd": "run-spotify"},
 ]
 
 # --- gamepads (identicos ao padserver de 2 jogadores) ---
@@ -266,6 +267,22 @@ def _mkpad():
 
 
 PADS = {1: _mkpad(), 2: _mkpad()}
+
+
+def _mkkbd():
+    """Teclado uinput pra navegar a Home Screen (kiosk) com o d-pad do Remote."""
+    try:
+        return UInput({e.EV_KEY: [e.KEY_UP, e.KEY_DOWN, e.KEY_LEFT, e.KEY_RIGHT,
+                                   e.KEY_ENTER, e.KEY_ESC]},
+                      name="Homelab Virtual Keyboard", vendor=0x1234, product=0x5679, version=1)
+    except Exception as ex:
+        print(f"[warn] uinput indisponivel pro teclado virtual ({ex}); aba Remote off.")
+        return None
+
+
+KBD = _mkkbd()
+REMOTE_KEYS = {"up": e.KEY_UP, "down": e.KEY_DOWN, "left": e.KEY_LEFT, "right": e.KEY_RIGHT,
+               "ok": e.KEY_ENTER, "back": e.KEY_ESC}
 
 
 # --- helpers de lancamento ---
@@ -506,10 +523,14 @@ def search_movies(term):
     for m in hits[:20]:
         poster = next((i["remoteUrl"] for i in m.get("images", [])
                        if i.get("coverType") == "poster"), None)
+        rating = m.get("ratings", {}).get("imdb", {}).get("value")
         out.append({"title": m["title"], "year": m.get("year"),
                     "tmdbId": m.get("tmdbId"),
                     "poster": f"/img?u={urllib.parse.quote(poster)}" if poster else None,
-                    "have": m.get("id", 0) > 0})
+                    "have": m.get("id", 0) > 0,
+                    "overview": m.get("overview", ""), "genres": m.get("genres", []),
+                    "rating": round(rating, 1) if rating else None,
+                    "runtime": m.get("runtime") or None})
     return out
 
 
@@ -568,10 +589,14 @@ def search_series(term):
     for m in hits[:20]:
         poster = next((i["remoteUrl"] for i in m.get("images", [])
                        if i.get("coverType") == "poster"), None)
+        rating = m.get("ratings", {}).get("value")
         out.append({"title": m["title"], "year": m.get("year"),
                     "tvdbId": m.get("tvdbId"),
                     "poster": f"/img?u={urllib.parse.quote(poster)}" if poster else None,
-                    "have": m.get("id", 0) > 0})
+                    "have": m.get("id", 0) > 0,
+                    "overview": m.get("overview", ""), "genres": m.get("genres", []),
+                    "rating": round(rating, 1) if rating else None,
+                    "runtime": m.get("runtime") or None})
     return out
 
 
@@ -594,10 +619,64 @@ def request_series(tvdb_id):
     return sonarr("/series", body)
 
 
+LIDARR = "http://localhost:8686/api/v1"
+try:
+    LIDARR_KEY = os.environ.get("OIKOS_LIDARR_KEY", "").strip()
+    if not LIDARR_KEY and os.environ.get("OIKOS_LIDARR_KEY_FILE"):
+        LIDARR_KEY = open(os.environ["OIKOS_LIDARR_KEY_FILE"]).read() \
+            .split("<ApiKey>")[1].split("</ApiKey>")[0]
+    if not LIDARR_KEY:
+        LIDARR_KEY = subprocess.run(
+            ["docker", "exec", "lidarr", "sh", "-c",
+             'grep -o "<ApiKey>[^<]*" /config/config.xml'],
+            capture_output=True, text=True).stdout.replace("<ApiKey>", "").strip()
+except Exception:
+    LIDARR_KEY = ""
+
+
+def lidarr(path, data=None, method=None):
+    r = urllib.request.Request(LIDARR + path,
+        data=json.dumps(data).encode() if data else None,
+        headers={"X-Api-Key": LIDARR_KEY, "Content-Type": "application/json"},
+        method=method or ("POST" if data else "GET"))
+    b = urllib.request.urlopen(r, timeout=30).read()
+    return json.loads(b) if b else None
+
+
+def search_music(term):
+    hits = lidarr("/artist/lookup?term=" + urllib.parse.quote(term))
+    out = []
+    for a in hits[:20]:
+        poster = next((i["remoteUrl"] for i in a.get("images", [])
+                       if i.get("coverType") == "poster"), None)
+        out.append({"title": a["artistName"], "year": None,
+                    "mbid": a.get("foreignArtistId"),
+                    "poster": f"/img?u={urllib.parse.quote(poster)}" if poster else None,
+                    "have": a.get("id", 0) > 0,
+                    "overview": a.get("overview", ""), "genres": a.get("genres", [])})
+    return out
+
+
+def request_artist(mbid):
+    hits = lidarr(f"/artist/lookup?term=lidarr:{mbid}")
+    a = hits[0] if isinstance(hits, list) else hits
+    qp = lidarr("/qualityprofile")[0]["id"]
+    mp = lidarr("/metadataprofile")[0]["id"]
+    body = {
+        "artistName": a["artistName"], "foreignArtistId": a["foreignArtistId"],
+        "images": a.get("images", []),
+        "qualityProfileId": qp, "metadataProfileId": mp,
+        "rootFolderPath": lidarr("/rootfolder")[0]["path"],
+        "monitored": True,
+        "addOptions": {"monitor": "all", "searchForMissingAlbums": True},
+    }
+    return lidarr("/artist", body)
+
+
 def get_downloads():
     """Agrega a fila de Radarr + Sonarr: o que esta baixando, com progresso."""
     out = []
-    for label, fn in (("filme", radarr), ("série", sonarr)):
+    for label, fn in (("filme", radarr), ("série", sonarr), ("música", lidarr)):
         try:
             q = fn("/queue?pageSize=50")
             for r in q.get("records", []):
@@ -649,6 +728,7 @@ PAGE = r"""<!doctype html><html><head><meta charset=utf-8>
   --accent:#c88010; --accent-2:#79740e; --p2:#9d0006;
   --border:#00000018; --bar:#fbf1c7d8; --overlay:#fbf1c7f2; --nm-grad:#f0e4b8ee;
   --serif:'EB Garamond',Georgia,serif; --sans:'Inter',system-ui,sans-serif;
+  --ease:cubic-bezier(.2,.7,.3,1);
 }
 :root[data-theme=dark]{
   --bg:#282d1c; --bg2:#2f3521; --surface:#363c26; --ui:#4f5b4a; --ui-2:#5a6a54;
@@ -670,7 +750,7 @@ html,body{height:100%;color:#eef1f6;overflow:hidden;
 #tabs{position:fixed;bottom:0;left:0;right:0;height:64px;display:flex;z-index:18;
   background:#12151cd8;backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);
   border-top:1px solid #ffffff12;padding-bottom:env(safe-area-inset-bottom);
-  transform:translateY(calc(100% + 4px));transition:transform .28s cubic-bezier(.2,.7,.3,1)}
+  transform:translateY(calc(100% + 4px));transition:transform .28s var(--ease)}
 #tabs.show{transform:translateY(0)}
 /* alca pra revelar a barra (some no modo Controle) */
 #tabgrip{position:fixed;bottom:0;left:0;right:0;height:26px;z-index:17;display:flex;
@@ -684,8 +764,9 @@ body[data-inpad="1"] #tabgrip{display:none}
 /* jogos */
 #games{padding:16px 14px;display:grid;grid-template-columns:repeat(auto-fill,minmax(108px,1fr));gap:14px}
 .card{background:#161a22;border-radius:14px;overflow:hidden;position:relative;
-  aspect-ratio:3/4;display:flex;flex-direction:column;border:1px solid #ffffff0d}
-.card:active{border-color:#5b9bff}
+  aspect-ratio:3/4;display:flex;flex-direction:column;border:1px solid #ffffff0d;
+  transition:border-color .18s var(--ease),transform .18s var(--ease)}
+.card:active{border-color:#5b9bff;transform:scale(.97)}
 .card .cov{flex:1;background:#0f1218 center/cover no-repeat;display:flex;
   align-items:center;justify-content:center;font-size:34px;color:#3a4150}
 .card .nm{padding:8px 9px;font-size:11.5px;font-weight:600;line-height:1.25;
@@ -797,6 +878,23 @@ body[data-inpad="1"] #tabgrip{display:none}
   display:flex;flex-direction:column;align-items:center;gap:10px;font-size:14px}
 .app:active{border-color:#4f8cff}
 .app .i{font-size:38px}
+/* controle remoto -- navega a Home Screen da TV */
+#remote{position:absolute;inset:0;display:none;flex-direction:column;
+  align-items:center;justify-content:center;gap:34px}
+#rd-search{width:min(78vw,340px);padding:13px 18px;border-radius:12px;border:0;
+  font:inherit;font-size:15px;background:#2b303c;color:#e6e6e6}
+#rdpad{display:grid;grid-template-columns:repeat(3,84px);grid-template-rows:repeat(3,84px);
+  gap:10px;place-items:center}
+#rdpad button{width:84px;height:84px;border-radius:16px;font-size:26px}
+#rd-up{grid-column:2;grid-row:1}
+#rd-left{grid-column:1;grid-row:2}
+#rd-ok{grid-column:2;grid-row:2;border-radius:50%!important;font-size:15px!important;
+  font-weight:700;letter-spacing:.03em}
+#rd-right{grid-column:3;grid-row:2}
+#rd-down{grid-column:2;grid-row:3}
+#rd-back{width:220px;height:56px;border-radius:14px;font-size:15px;font-weight:700}
+#rd-close{width:220px;height:50px;border-radius:14px;font-size:14px;font-weight:700;
+  margin-top:-14px}
 /* mini-player fixo acima da tab bar (o que esta tocando/rodando) */
 #miniplayer{position:fixed;left:0;right:0;bottom:62px;z-index:12;display:none;
   align-items:center;gap:10px;padding:8px 12px;background:#161a22;
@@ -865,7 +963,11 @@ body[data-p="2"] #pnum{color:#e8552d}
   gap:clamp(14px,3vmin,28px);padding:clamp(16px,4vmin,40px) 5vw clamp(16px,3vmin,32px)}
 body[data-mode=media] #mediactl{display:flex}
 body[data-mode=media] #pad>.p,
-body[data-mode=media] #dpad{display:none}   /* esconde TODO o gamepad (incl. d-pad) */
+body[data-mode=media] #dpad,
+body[data-mode=home] #pad>.p,
+body[data-mode=home] #dpad{display:none}   /* esconde TODO o gamepad (incl. d-pad) */
+body[data-mode=home] #swapd{display:none}
+body[data-mode=home] #remote{display:flex}
 .mc-corner{position:absolute!important;top:clamp(10px,3vmin,22px);left:4vw;
   width:clamp(40px,9vmin,60px);height:clamp(40px,9vmin,60px);
   border-radius:50%;font-size:clamp(18px,4vmin,26px);background:#2b303c!important;opacity:.8}
@@ -979,6 +1081,12 @@ html,body{background:var(--bg)!important;background-image:none!important;color:v
 #dlbtn{background:var(--surface);border:1px solid var(--border);color:var(--tx)}
 #dlbadge{background:var(--accent);color:#fff}
 #dllist,#eplist{background:var(--overlay)}
+#toast{background:var(--surface)!important;border:1px solid var(--border);color:var(--tx)!important;
+  box-shadow:0 10px 30px #0004}
+.dl .bar{background:var(--ui)}
+.dl .bar>i{background:var(--accent)}
+.poster .badge{background:var(--accent)!important;color:#fff!important}
+.poster .req{background:var(--accent-2)!important;color:#fff!important}
 #np-bg{filter:blur(38px) brightness(.5) saturate(1.15)}
 body[data-p="2"] #pnum{color:var(--p2)}
 /* gamepad */
@@ -996,6 +1104,12 @@ body[data-p="2"] #pnum{color:var(--p2)}
 .lbl,#pnum{color:var(--tx-2)}
 /* apps */
 .app{background:var(--surface)!important;border:1px solid var(--border)!important;color:var(--tx)}
+/* controle remoto */
+#rd-search{background:var(--surface)!important;border:1px solid var(--border)!important;color:var(--tx)!important}
+#rdpad button,#rd-back{background:var(--ui);border:0;color:var(--tx);transition:background .15s var(--ease)}
+#rdpad button:active,#rd-back:active{background:var(--accent);color:#fff}
+#rd-ok{background:var(--accent)!important;color:#fff!important}
+#rd-close{background:0!important;color:var(--p2)!important;border:1px solid var(--p2)!important}
 </style></head><body>
 
 <div id=app>
@@ -1021,6 +1135,14 @@ body[data-p="2"] #pnum{color:var(--p2)}
     <div id=series class=pgrid></div>
   </div>
   <div class="view" id=v-music><div id=music class=pgrid></div></div>
+
+  <div class="view" id=v-search>
+    <div class=searchbar><input class=si id=s-input type=search placeholder="Buscar filme, série ou música…" enterkeyhint=search><button class=sx style=display:none>✕</button></div>
+    <div id=s-hint style="padding:20px;opacity:.5">digite pra buscar</div>
+    <div id=s-movies-wrap style=display:none><div class=sec>Filmes</div><div id=s-movies class=pgrid></div></div>
+    <div id=s-series-wrap style=display:none><div class=sec>Séries</div><div id=s-series class=pgrid></div></div>
+    <div id=s-music-wrap style=display:none><div class=sec>Música</div><div id=s-music class=pgrid></div></div>
+  </div>
 
   <div class="view" id=v-apps>
     <div id=apps></div>
@@ -1079,6 +1201,18 @@ body[data-p="2"] #pnum{color:var(--p2)}
       </div>
     </div>
   </div>
+  <div id=remote>
+    <input id=rd-search type=search placeholder="🔍 buscar na TV…" enterkeyhint=search>
+    <div id=rdpad>
+      <button id=rd-up data-rk=up>▲</button>
+      <button id=rd-left data-rk=left>◀</button>
+      <button id=rd-ok data-rk=ok>OK</button>
+      <button id=rd-right data-rk=right>▶</button>
+      <button id=rd-down data-rk=down>▼</button>
+    </div>
+    <button id=rd-back data-rk=back>◁ Voltar</button>
+    <button id=rd-close onclick="stop()">✕ Fechar tudo</button>
+  </div>
 </div>
 <div id=tvview onclick="closeTv()"><img id=tvimg alt="TV"><button id=tvclose>✕</button></div>
 
@@ -1094,6 +1228,7 @@ body[data-p="2"] #pnum{color:var(--p2)}
   <button data-tab=movies><span class=i>🎬</span>Filmes</button>
   <button data-tab=series><span class=i>📺</span>Séries</button>
   <button data-tab=music><span class=i>🎵</span>Música</button>
+  <button data-tab=search><span class=i>🔍</span>Busca</button>
   <button data-tab=apps><span class=i>⚙️</span>Apps</button>
   <button data-tab=pad><span class=i>🎮</span>Controle</button>
 </div>
@@ -1110,7 +1245,7 @@ const P = new URLSearchParams(location.search).get('p') === '2' ? 2 : 1;
 document.body.dataset.p = P;
 
 // ---------- navegacao de abas ----------
-const TABS=['games','movies','series','music','apps'];
+const TABS=['games','movies','series','music','apps','search'];
 const views={};
 for(const t of TABS) views[t]=document.getElementById('v-'+t);
 views.pad=document.getElementById('pad');
@@ -1237,6 +1372,8 @@ const SEARCH={
            req:r=>({ep:'/api/request',        body:{tmdbId:r.tmdbId}}), where:'Filmes'},
   series: {url:'/api/search-series',  grid:'series', reload:()=>loadSeries(),
            req:r=>({ep:'/api/request-series', body:{tvdbId:r.tvdbId}}), where:'Séries'},
+  music:  {url:'/api/search-music',   grid:'music',  reload:()=>loadMusic(),
+           req:r=>({ep:'/api/request-music',  body:{mbid:r.mbid}}),    where:'Música'},
 };
 let searchT=null;
 for(const inp of document.querySelectorAll('.searchbar .si')){
@@ -1275,6 +1412,58 @@ async function reqItem(kind,r){
   toast(res.ok ? '✓ '+r.title+' — baixando, aparece em '+cfg.where+' quando pronto' : 'erro ao solicitar');
   setTimeout(loadDownloads,2000);
 }
+
+// ---------- busca unificada: filme (Radarr), serie (Sonarr), musica (Lidarr) ----------
+function clearUnifiedSearch(){
+  const h=document.getElementById('s-hint');
+  h.textContent='digite pra buscar'; h.style.display='block';
+  for(const k of ['movies','series','music']) document.getElementById('s-'+k+'-wrap').style.display='none';
+}
+
+const S_IDS={movie:'s-movies',series:'s-series',music:'s-music'};
+function renderSearchGroup(kind,res){
+  const wrap=document.getElementById(S_IDS[kind]+'-wrap'), el=document.getElementById(S_IDS[kind]);
+  wrap.style.display = res.length? 'block':'none';
+  el.innerHTML='';
+  for(const r of res){
+    const c=posterCard({name: kind==='music'?r.title:`${r.title} (${r.year||'?'})`,cover:r.poster},
+      ()=>openSearchDetail(kind,r));
+    const tag=document.createElement('div');
+    if(r.have){tag.className='badge';tag.textContent='NA BIBLIOTECA';}
+    else{tag.className='req';tag.textContent='＋ baixar';}
+    c.appendChild(tag); el.appendChild(c);
+  }
+}
+
+async function unifiedSearch(q){
+  document.getElementById('s-hint').style.display='none';
+  const [movies,series,artists]=await Promise.all([
+    fetch(SEARCH.movie.url+'?q='+encodeURIComponent(q)).then(r=>r.json()).catch(()=>[]),
+    fetch(SEARCH.series.url+'?q='+encodeURIComponent(q)).then(r=>r.json()).catch(()=>[]),
+    fetch(SEARCH.music.url+'?q='+encodeURIComponent(q)).then(r=>r.json()).catch(()=>[]),
+  ]);
+  renderSearchGroup('movie',movies);
+  renderSearchGroup('series',series);
+  renderSearchGroup('music',artists);
+  if(!movies.length && !series.length && !artists.length){
+    const h=document.getElementById('s-hint');
+    h.textContent='nada encontrado'; h.style.display='block';
+  }
+}
+
+(function(){
+  const inp=document.getElementById('s-input'), xb=inp.parentElement.querySelector('.sx');
+  let t=null;
+  inp.addEventListener('input',()=>{
+    xb.style.display=inp.value?'block':'none';
+    clearTimeout(t);
+    const q=inp.value.trim();
+    if(!q){clearUnifiedSearch();return;}
+    t=setTimeout(()=>unifiedSearch(q),500);
+  });
+  inp.addEventListener('search',()=>{const q=inp.value.trim();q?unifiedSearch(q):clearUnifiedSearch();});
+  xb.onclick=()=>{inp.value='';xb.style.display='none';clearUnifiedSearch();inp.blur();};
+})();
 
 // ---------- downloads ----------
 async function loadDownloads(){
@@ -1346,6 +1535,30 @@ async function openDetail(id, kind, cover, moviePath){
   }
 }
 function closeDetail(){document.getElementById('detail').classList.remove('on');}
+
+// resultado de busca (Radarr/Sonarr/Lidarr) -- mesma tela de detalhe do item ja
+// baixado, so troca "Assistir/Jogar" por "Baixar" quando ainda nao esta na biblioteca
+function openSearchDetail(kind,r){
+  const ov=document.getElementById('detail');
+  document.getElementById('dt-hero').style.backgroundImage=r.poster
+    ?`linear-gradient(180deg,#10141cbb,#10141c),url(${r.poster})`:'';
+  const meta=[r.year,r.runtime?r.runtime+' min':'',r.rating?'⭐ '+r.rating:''].filter(Boolean).join('  ·  ');
+  const genres=(r.genres||[]).slice(0,4).join(' · ');
+  const posterImg=r.poster?`<div class=dt-poster style="background-image:url(${r.poster})"></div>`:'';
+  const action=r.have
+    ?'<button class=dt-play style="opacity:.6" disabled>✓ já está na biblioteca</button>'
+    :`<button class=dt-play onclick='closeDetail();reqItem(${JSON.stringify(kind)},${JSON.stringify(r)})'>⬇ Baixar</button>`;
+  document.getElementById('dt-body').innerHTML=`
+    <div class=dt-top>${posterImg}<div class=dt-head>
+      <div class=dt-title>${kind==='music'?r.title:`${r.title} (${r.year||'?'})`}</div>
+      <div class=dt-meta>${meta}</div>
+      ${genres?`<div class=dt-gen>${genres}</div>`:''}
+      ${action}
+    </div></div>
+    ${r.overview?`<div class=dt-ov>${r.overview}</div>`:''}`;
+  ov.classList.add('on'); ov.scrollTop=0;
+}
+
 async function play(pathOrList, kind, cover){
   const body = Array.isArray(pathOrList) ? {paths:pathOrList,kind,cover} : {path:pathOrList,kind,cover};
   await fetch('/api/play',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
@@ -1432,9 +1645,9 @@ async function loadApps(){
 async function refreshStatus(){
   const s = await fetch('/api/status').then(r=>r.json()).catch(()=>({running:false}));
   const mp=document.getElementById('miniplayer');
-  document.body.dataset.mode = s.kind==='media' ? 'media' : 'game';
+  document.body.dataset.mode = s.kind==='media' ? 'media' : (s.kind==='home' ? 'home' : 'game');
   if(document.body.dataset.inpad==='1'){
-    if(document.body.dataset.mode==='media') unlockOrient(); else lockLandscape();
+    if(document.body.dataset.mode==='game') lockLandscape(); else unlockOrient();
   }
   if(!s.running){ mp.classList.remove('on'); return; }
   mp.classList.add('on');
@@ -1478,6 +1691,27 @@ function closeTv(){ document.getElementById('tvview').classList.remove('on'); cl
 // ---------- gamepad (controle) ----------
 const post=o=>{o.p=P;return fetch('/p',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(o),keepalive:true}).catch(()=>{});};
 const buzz=(ms=12)=>{try{navigator.vibrate&&navigator.vibrate(ms)}catch(_){}};
+
+// controle remoto: navega a Home Screen da TV (teclado uinput no hub)
+const remoteKey=k=>fetch('/api/remote',{method:'POST',headers:{'Content-Type':'application/json'},
+  body:JSON.stringify({key:k}),keepalive:true}).catch(()=>{});
+for(const el of document.querySelectorAll('#remote [data-rk]')){
+  const k=el.dataset.rk;
+  const go=ev=>{ev.preventDefault();buzz(14);remoteKey(k);};
+  el.addEventListener('touchstart',go,{passive:false});
+  el.addEventListener('click',go);
+}
+
+// campo de busca do remoto: cada tecla digitada aqui aparece ao vivo na Busca da TV
+(function(){
+  const si=document.getElementById('rd-search');
+  let t=null;
+  si.addEventListener('input',()=>{
+    clearTimeout(t);
+    t=setTimeout(()=>fetch('/api/search-query',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({q:si.value})}),150);
+  });
+})();
 
 // turbo: enquanto ON, segurar um botao de acao dispara repetido (~11Hz)
 const FACE=new Set(['a','b','x','y']);
@@ -1591,6 +1825,551 @@ button{padding:14px;border:0;border-radius:12px;background:#2f6df0;color:#fff;
 </form></body></html>"""
 
 
+HOME_PAGE = r"""<!doctype html><html><head><meta charset=utf-8>
+<title>Oikos Home</title>
+<link rel=preconnect href=https://fonts.googleapis.com>
+<link rel=preconnect href=https://fonts.gstatic.com crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=EB+Garamond:ital,wght@0,500;0,600;1,500&family=Inter:wght@400;500;600;700&display=swap" rel=stylesheet>
+<style>
+/* ===== paleta Yerba Mate — Terere (dia) / Cimarrao (noite), igual ao Hub ===== */
+:root{
+  --bg:#fbf1c7; --bg2:#f0e4b8; --surface:#ebdfb0; --ui:#ddd2a0; --ui-2:#cbbe8a;
+  --tx:#3c3836; --tx-2:#504945; --tx-3:#7c6f64;
+  --accent:#c88010; --accent-2:#79740e; --p2:#9d0006;
+  --border:#00000018; --nm-grad:#f0e4b8ee;
+  --serif:'EB Garamond',Georgia,serif; --sans:'Inter',system-ui,sans-serif;
+}
+:root[data-theme=dark]{
+  --bg:#282d1c; --bg2:#2f3521; --surface:#363c26; --ui:#4f5b4a; --ui-2:#5a6a54;
+  --tx:#dce0d9; --tx-2:#a8b09f; --tx-3:#7a8573;
+  --accent:#d4a033; --accent-2:#7a9e38; --p2:#c25d44;
+  --border:#ffffff16; --nm-grad:#1d2114ee;
+}
+:root{--ease:cubic-bezier(.2,.7,.3,1)}
+*{box-sizing:border-box;margin:0;-webkit-user-select:none;user-select:none}
+html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--tx)}
+body{font:500 16px var(--sans)}
+/* trilho lateral, tipo Netflix, escondido -- so aparece quando a seta esquerda
+   ativa (mesmo gesto do tabgrip no Hub do celular: some sozinho, some ao sair) */
+#nav{position:fixed;top:0;left:0;bottom:0;width:132px;padding:52px 0;z-index:20;
+  display:flex;flex-direction:column;justify-content:center;gap:8px;
+  background:var(--bg2);border-right:1px solid var(--border);
+  transform:translateX(-100%);transition:transform .32s var(--ease),box-shadow .32s var(--ease)}
+#nav.show{transform:translateX(0);box-shadow:10px 0 28px #00000022}
+#navgrip{position:fixed;top:0;left:0;bottom:0;width:14px;z-index:19;
+  display:flex;align-items:center;justify-content:center}
+#navgrip i{width:5px;height:52px;border-radius:3px;background:var(--ui-2);opacity:.6}
+#nav button{background:0;border:0;color:var(--tx-3);font:inherit;font-family:var(--sans);
+  font-size:13px;font-weight:600;letter-spacing:.03em;padding:16px 4px;
+  display:flex;flex-direction:column;align-items:center;gap:7px;
+  border-left:3px solid transparent;transition:color .18s var(--ease),background .18s var(--ease)}
+#nav button .i{font-size:28px}
+#nav button.active{color:var(--accent)}
+#nav button.focus{border-left-color:var(--accent);background:var(--surface)}
+#main{position:absolute;inset:0;left:14px;overflow:hidden;
+  transition:left .32s var(--ease)}
+body.nav-open #main{left:132px}
+/* barra fixa com fundo solido -- sem ela o relogio ficava ilegivel por cima
+   dos cards ao rolar (a lista rola por baixo, o relogio nao) */
+#topbar{position:absolute;top:0;left:0;right:0;height:130px;z-index:5;
+  display:flex;align-items:center;justify-content:flex-end;padding:0 52px;
+  background:linear-gradient(var(--bg) 62%,transparent)}
+#clock{font-size:46px;font-weight:600;letter-spacing:.01em;font-variant-numeric:tabular-nums;
+  font-family:var(--serif);color:var(--tx)}
+#rows{height:100%;overflow-y:auto;padding:150px 52px 52px}
+/* hero da Início: preenche o vazio com o item mais recente em destaque */
+#hero{display:none;position:relative;height:40vh;min-height:340px;border-radius:16px;
+  overflow:hidden;margin:0 4px 36px;background:var(--surface) center/cover no-repeat}
+#hero.on{display:block}
+#hero::after{content:'';position:absolute;inset:0;z-index:1;
+  background:linear-gradient(0deg,var(--bg) 0%,var(--bg) 30%,transparent 82%)}
+#hero-info{position:absolute;left:40px;right:40px;bottom:30px;z-index:2}
+#hero-title{font-family:var(--serif);font-size:36px;font-weight:700;color:var(--tx);text-wrap:balance;
+  text-shadow:0 2px 14px var(--bg)}
+#hero-meta{font-size:14.5px;font-weight:600;color:var(--tx-2);margin-top:8px;letter-spacing:.02em}
+.sec{font-size:18px;font-weight:700;color:var(--accent);font-family:var(--serif);
+  letter-spacing:.01em;margin:0 0 16px 4px}
+/* categorias: grid que estica os cards pra preencher a linha (sem sobra vazia
+   quando o ultimo card nao cabe); Continuar (Inicio) fica em fileira que rola */
+.row{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));
+  gap:20px;padding:6px 4px 38px}
+.row.scroll{display:flex;flex-wrap:nowrap;overflow-x:hidden}
+.card{flex:0 0 250px;aspect-ratio:2/3;border-radius:12px;overflow:hidden;position:relative;
+  background:var(--surface) center/cover no-repeat;border:1px solid var(--border);
+  display:flex;align-items:center;justify-content:center;font-size:50px;color:var(--tx-3);
+  transition:transform .22s var(--ease),border-color .22s var(--ease),box-shadow .22s var(--ease)}
+.card.sel{border-color:var(--accent);border-width:3px;transform:scale(1.07);box-shadow:0 8px 28px #0004}
+.card .nm{position:absolute;bottom:0;left:0;right:0;padding:26px 12px 11px;font-size:14.5px;
+  font-weight:600;color:var(--tx);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+  background:linear-gradient(transparent,var(--nm-grad) 55%)}
+.card .sys{position:absolute;top:7px;right:7px;background:var(--accent);color:#fff;
+  border-radius:6px;font-size:9.5px;font-weight:700;padding:3px 7px;letter-spacing:.06em}
+#empty{padding:8px 4px;color:var(--tx-3);font-size:14px}
+/* apps: mesmo card/selecao, mas quadrado com icone+label centralizados */
+.app-tile{aspect-ratio:1/1;flex-direction:column;gap:14px}
+.app-tile .ic{font-size:56px}
+.app-tile .nm{position:static;background:none;padding:0;text-align:center;
+  font-size:15px;white-space:normal}
+/* busca: teclado fica no celular, a TV so mostra a query chegando ao vivo */
+#search-bar{display:flex;align-items:center;gap:14px;background:var(--surface);
+  border:1px solid var(--border);border-radius:12px;padding:18px 24px;margin:0 4px 30px;
+  font-size:21px;color:var(--tx)}
+#search-bar .ic{font-size:22px;opacity:.6}
+#search-bar .cursor{display:inline-block;width:2px;height:23px;background:var(--accent);
+  animation:sb-blink 1s step-end infinite}
+@keyframes sb-blink{50%{opacity:0}}
+.hchip{background:var(--ui);color:var(--tx);border-radius:20px;padding:11px 20px;
+  font-size:14px;font-weight:600;border:3px solid transparent;transition:border-color .18s var(--ease)}
+.hchip.sel{border-color:var(--accent)}
+/* detalhe do item, tipo o overlay do Hub do celular */
+#detail{position:fixed;inset:0;z-index:9;display:flex;align-items:flex-end;
+  opacity:0;pointer-events:none;transition:opacity .22s var(--ease)}
+#detail.on{opacity:1;pointer-events:auto}
+#detail-panel{transform:translateY(18px);transition:transform .28s var(--ease)}
+#detail.on #detail-panel{transform:translateY(0)}
+#detail-bd{position:absolute;inset:0;background:var(--bg2) center/cover no-repeat;filter:brightness(.5) blur(2px)}
+#detail-bd::after{content:'';position:absolute;inset:0;
+  background:linear-gradient(0deg,var(--bg) 10%,transparent 60%),
+             linear-gradient(90deg,var(--bg)cc 0%,transparent 55%)}
+#detail-panel{position:relative;display:flex;gap:36px;padding:56px 64px;max-width:1100px}
+#detail-poster{flex:0 0 240px;aspect-ratio:2/3;border-radius:14px;background:var(--surface) center/cover no-repeat;
+  border:1px solid var(--border);box-shadow:0 16px 40px #0006}
+#detail-info{display:flex;flex-direction:column;gap:14px;padding-top:8px;max-width:640px}
+#detail-title{font-family:var(--serif);font-size:38px;font-weight:600;color:var(--tx);text-wrap:balance}
+#detail-meta{font-size:14px;color:var(--tx-2);letter-spacing:.02em}
+#detail-overview{font-size:15px;line-height:1.55;color:var(--tx-2)}
+#detail-cast{display:flex;gap:14px;overflow-x:auto;padding:2px 2px 6px;max-width:640px}
+#detail-cast .p{flex:0 0 64px;text-align:center}
+#detail-cast .p .f{width:64px;height:64px;border-radius:50%;background:var(--ui) center/cover no-repeat;
+  display:flex;align-items:center;justify-content:center;font-size:24px;color:var(--tx-3)}
+#detail-cast .p .n{font-size:11px;font-weight:600;margin-top:5px;color:var(--tx);line-height:1.2}
+#detail-cast .p .r{font-size:10px;color:var(--tx-3);line-height:1.2}
+#detail-shots{display:flex;gap:12px;overflow-x:auto;padding:2px 2px 6px;max-width:640px}
+#detail-shots img{flex:0 0 200px;height:112px;border-radius:9px;object-fit:cover;
+  border:1px solid var(--border)}
+#detail-play{align-self:flex-start;margin-top:8px;background:var(--accent);color:#fff;border:0;
+  border-radius:9px;padding:13px 26px;font:inherit;font-weight:700;font-size:15px;letter-spacing:.02em;
+  box-shadow:0 6px 18px #0003}
+/* fila de downloads (Radarr+Sonarr+Lidarr) -- so leitura, sem selecao */
+.dl-row{display:flex;align-items:center;gap:20px;padding:16px 22px;margin:0 4px 14px;
+  background:var(--surface);border:1px solid var(--border);border-radius:12px}
+.dl-row .dk{flex:0 0 64px;font-size:11px;font-weight:700;color:var(--accent);
+  text-transform:uppercase;letter-spacing:.04em}
+.dl-row .dn{flex:1;font-size:15px;color:var(--tx);overflow:hidden;text-overflow:ellipsis;
+  white-space:nowrap}
+.dl-row .dp{width:180px;height:8px;border-radius:4px;background:var(--ui);overflow:hidden}
+.dl-row .dp i{display:block;height:100%;background:var(--accent)}
+.dl-row .dpct{width:52px;text-align:right;font-size:13px;color:var(--tx-2);
+  font-variant-numeric:tabular-nums}
+/* toast (confirmacao de "pedir pra baixar") */
+#tv-toast{position:fixed;bottom:44px;left:50%;transform:translateX(-50%) translateY(20px);
+  background:var(--surface);border:1px solid var(--border);color:var(--tx);
+  padding:16px 30px;border-radius:12px;font-size:16px;font-weight:600;
+  box-shadow:0 10px 30px #0004;opacity:0;pointer-events:none;z-index:30;
+  transition:opacity .25s var(--ease),transform .25s var(--ease)}
+#tv-toast.on{opacity:1;transform:translateX(-50%) translateY(0)}
+</style></head><body>
+<div id=navgrip><i></i></div>
+<div id=nav></div>
+<div id=main>
+  <div id=topbar><div id=clock></div></div>
+  <div id=rows>
+    <div id=hero><div id=hero-info><div id=hero-title></div><div id=hero-meta></div></div></div>
+    <div id=sections></div>
+  </div>
+</div>
+<div id=detail>
+  <div id=detail-bd></div>
+  <div id=detail-panel>
+    <div id=detail-poster></div>
+    <div id=detail-info>
+      <div id=detail-title></div>
+      <div id=detail-meta></div>
+      <div id=detail-overview></div>
+      <div id=detail-cast></div>
+      <div id=detail-shots></div>
+      <button id=detail-play>▶ Enter pra tocar</button>
+    </div>
+  </div>
+</div>
+<div id=tv-toast></div>
+<script>
+// tema Yerba Mate: Terere (6h-18h) / Cimarrao (18h-6h), igual ao Hub do celular
+// (hora em America/Sao_Paulo via Intl, mesmo motivo do relogio: nao confia no fuso do sistema)
+(function(){var hfmt=new Intl.DateTimeFormat('en-US',{timeZone:'America/Sao_Paulo',hour:'numeric',hour12:false});
+  function t(){var h=parseInt(hfmt.format(new Date()),10);
+  document.documentElement.dataset.theme=(h>=6&&h<18)?'light':'dark';}
+  t();setInterval(t,600000);})();
+
+// hora fixada em America/Sao_Paulo via Intl (nao confia no fuso do sistema/sandbox
+// do browser -- o Librewolf em kiosk as vezes fica preso em UTC mesmo com TZ certo)
+const CLOCK_FMT=new Intl.DateTimeFormat('pt-BR',
+  {timeZone:'America/Sao_Paulo',hour:'2-digit',minute:'2-digit',hour12:false});
+function tick(){document.getElementById('clock').textContent=CLOCK_FMT.format(new Date());}
+tick();setInterval(tick,1000);
+
+const CATS=[
+  {id:'home',   label:'Início',  icon:'🏠', sections:[{label:'Continuar', url:'/api/recent',  scroll:true}]},
+  {id:'movies', label:'Filmes',  icon:'🎬', sections:[{label:'Filmes',    url:'/api/movies'}]},
+  {id:'series', label:'Séries',  icon:'📺', sections:[{label:'Séries',    url:'/api/series'}]},
+  {id:'music',  label:'Música',  icon:'🎵', sections:[{label:'Música',    url:'/api/albums'}]},
+  {id:'games',  label:'Jogos',   icon:'🎮', sections:[{label:'Jogos',     url:'/api/games'}]},
+  {id:'search', label:'Busca',   icon:'🔍', sections:[]},
+  {id:'downloads', label:'Downloads', icon:'📥', sections:[]},
+  {id:'apps', label:'Apps', icon:'⚙️', sections:[]},
+];
+let navIdx=0, zone='content';   // zone: 'nav' | 'content' | 'detail'
+let grid=[];   // grid[rowIdx] = [{el,item}]
+let r=0,c=0;
+let detailItem=null;
+let detailKind=null;   // null = item local (toca); 'movie'|'series'|'music' = resultado de busca (baixa)
+const cache={};
+
+function cardEl(item){
+  const div=document.createElement('div');
+  div.className='card';
+  if(item.cover) div.style.backgroundImage=`url(${item.cover})`;
+  else div.textContent=item.type==='game'||item.system?'🎮':(item.albums?'🎵':'🎬');
+  if(item.system){const s=document.createElement('div');s.className='sys';
+    s.textContent=item.label||item.system;div.appendChild(s);}
+  const nm=document.createElement('div');
+  nm.className='nm'; nm.textContent=item.name||item.label||'';
+  div.appendChild(nm);
+  return div;
+}
+
+function launchable(item){ return !!(item.system || item.type==='movie' || (item.path && !item.albums)); }
+
+function launch(item){
+  if(!launchable(item)) return;
+  if(item.system) fetch('/api/launch',{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({system:item.system,path:item.path})});
+  else fetch('/api/play',{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({path:item.path,cover:item.cover,kind:'video'})});
+}
+
+// tela de detalhe unica: item local (toca) ou resultado de busca (baixa) so mudam
+// os dados que entram aqui e o texto do botao -- o render e sempre o mesmo
+function renderDetailPanel(d, cover, playLabel){
+  document.getElementById('detail-title').textContent=d.name||'';
+  const meta=[d.tag||null, d.year, (d.genres||[]).join(', ')||null,
+    d.rating?('★ '+d.rating):null, d.runtime?(d.runtime+' min'):null].filter(Boolean).join(' · ');
+  document.getElementById('detail-meta').textContent=meta;
+  document.getElementById('detail-overview').textContent=d.overview||'';
+  document.getElementById('detail-cast').innerHTML=(d.cast||[]).map(p=>
+    `<div class=p>${p.img?`<div class=f style="background-image:url(${p.img})"></div>`:'<div class=f>👤</div>'}`+
+    `<div class=n>${p.name}</div>${p.role?`<div class=r>${p.role}</div>`:''}</div>`).join('');
+  document.getElementById('detail-shots').innerHTML=(d.shots||[]).map(s=>`<img src="${s}">`).join('');
+  document.getElementById('detail-bd').style.backgroundImage=`url(${d.backdrop||cover||''})`;
+  document.getElementById('detail-poster').style.backgroundImage=cover?`url(${cover})`:'';
+  document.getElementById('detail-play').textContent=playLabel;
+  document.getElementById('detail').classList.add('on');
+  zone='detail';
+}
+
+async function openDetail(item){
+  detailItem=item; detailKind=null;
+  let d={};
+  try{
+    d=item.system
+      ? await fetch(`/api/gamedetail?name=${encodeURIComponent(item.name)}&system=${item.system}`).then(x=>x.json())
+      : await fetch(`/api/detail?id=${encodeURIComponent(item.id)}`).then(x=>x.json());
+  }catch(_){}
+  d.name = d.name || item.name;
+  renderDetailPanel(d, item.cover, '▶ Enter pra tocar');
+}
+
+function openSearchDetail(kind,r){
+  detailItem=r; detailKind=kind;
+  const d={
+    name: kind==='music' ? r.title : `${r.title} (${r.year||'?'})`,
+    tag: r.have ? 'já está na biblioteca' : null,
+    genres: r.genres, rating: r.rating, runtime: r.runtime, overview: r.overview, backdrop: r.poster,
+  };
+  renderDetailPanel(d, r.poster, r.have ? '✓ já está na biblioteca' : '⬇ Enter pra baixar');
+}
+
+function detailAct(){
+  if(detailKind) requestSearchItem(detailKind, detailItem);
+  else launch(detailItem);
+  closeDetail();
+}
+
+function closeDetail(){ document.getElementById('detail').classList.remove('on'); zone='content'; detailKind=null; }
+
+function renderNav(){
+  const nav=document.getElementById('nav'); nav.innerHTML='';
+  nav.classList.toggle('show', zone==='nav');
+  document.body.classList.toggle('nav-open', zone==='nav');
+  CATS.forEach((cat,i)=>{
+    const b=document.createElement('button');
+    b.className=(cat.id===CATS[navIdx].id?'active':'')+' '+(zone==='nav'&&i===navIdx?'focus':'');
+    b.innerHTML=`<span class=i>${cat.icon}</span>${cat.label}`;
+    nav.appendChild(b);
+  });
+}
+
+function selectContent(nr,nc){
+  const old=grid[r]&&grid[r][c]; if(old) old.el.classList.remove('sel');
+  const nr2=Math.max(0,Math.min(grid.length-1,nr));
+  const row=grid[nr2]||[];
+  if(nc<0){ zone='nav'; renderNav(); return; }
+  r=nr2; c=Math.max(0,Math.min(row.length-1,nc));
+  const cur=row[c]; if(!cur) return;
+  cur.el.classList.add('sel');
+  cur.el.scrollIntoView({inline:'center',block:'nearest',behavior:'smooth'});
+}
+
+// cards quebram a linha por CSS (flex-wrap); agrupa pela posicao real na tela
+// pra cima/baixo saber em qual fileira visual cada card caiu
+function chunkByRow(cells){
+  const rows=[]; let curTop=null,cur=[];
+  for(const cell of cells){
+    const top=cell.el.offsetTop;
+    if(curTop===null||Math.abs(top-curTop)>4){ if(cur.length) rows.push(cur); cur=[]; curTop=top; }
+    cur.push(cell);
+  }
+  if(cur.length) rows.push(cur);
+  return rows;
+}
+
+// ---------- Busca: teclado fica no celular (aba Controle), a TV so mostra/poll ----------
+let lastQuery='', prevCatId=null;
+const HIST_KEY='oikos_search_hist';
+function getHist(){ try{return JSON.parse(localStorage.getItem(HIST_KEY)||'[]')}catch(_){return []} }
+function pushHist(q){
+  if(!q) return;
+  let h=getHist().filter(x=>x!==q); h.unshift(q); h=h.slice(0,8);
+  localStorage.setItem(HIST_KEY, JSON.stringify(h));
+}
+
+function tvSearchCard(item,kind){
+  const div=document.createElement('div'); div.className='card';
+  if(item.poster) div.style.backgroundImage=`url(${item.poster})`;
+  else div.textContent = kind==='music'?'🎵':(kind==='series'?'📺':'🎬');
+  if(item.have){const s=document.createElement('div');s.className='sys';s.textContent='NA BIBLIOTECA';div.appendChild(s);}
+  const nm=document.createElement('div'); nm.className='nm';
+  nm.textContent = kind==='music' ? item.title : `${item.title} (${item.year||'?'})`;
+  div.appendChild(nm);
+  return div;
+}
+let tvToastT=null;
+function tvToast(msg){
+  const t=document.getElementById('tv-toast'); t.textContent=msg; t.classList.add('on');
+  clearTimeout(tvToastT); tvToastT=setTimeout(()=>t.classList.remove('on'),3200);
+}
+
+async function requestSearchItem(kind,r){
+  if(r.have){ tvToast('já está na biblioteca'); return; }
+  tvToast('Pedindo '+r.title+'…');
+  const ep = kind==='movie'?'/api/request':kind==='series'?'/api/request-series':'/api/request-music';
+  const body = kind==='movie'?{tmdbId:r.tmdbId}:kind==='series'?{tvdbId:r.tvdbId}:{mbid:r.mbid};
+  const res=await fetch(ep,{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify(body)}).then(x=>x.json()).catch(()=>({ok:false}));
+  tvToast(res.ok ? '✓ '+r.title+' — baixando' : 'erro ao pedir '+r.title);
+}
+
+// ---------- Downloads: fila de Radarr+Sonarr+Lidarr, so leitura ----------
+let dlPollT=null;
+async function renderDownloads(){
+  const dl=await fetch('/api/downloads').then(r=>r.json()).catch(()=>[]);
+  const el=document.getElementById('sections'); el.innerHTML='';
+  const sec=document.createElement('div'); sec.className='sec'; sec.textContent='Baixando agora';
+  el.appendChild(sec);
+  if(!dl.length){
+    const empty=document.createElement('div'); empty.className='empty'; empty.textContent='nada baixando';
+    el.appendChild(empty); return;
+  }
+  for(const d of dl){
+    const row=document.createElement('div'); row.className='dl-row';
+    row.innerHTML=`<span class=dk>${d.kind}</span><span class=dn>${d.title}</span>`+
+      `<div class=dp><i style="width:${d.percent}%"></i></div><span class=dpct>${d.percent}%</span>`;
+    el.appendChild(row);
+  }
+}
+function initDownloadsScreen(){
+  renderDownloads();
+  dlPollT=setInterval(renderDownloads,3000);
+}
+
+// ---------- Apps: mesma lista/endpoint que o Hub do celular ja usa ----------
+async function initAppsScreen(){
+  const apps=await fetch('/api/apps').then(x=>x.json()).catch(()=>[]);
+  const el=document.getElementById('sections'); el.innerHTML='';
+  const sec=document.createElement('div'); sec.className='sec'; sec.textContent='Apps';
+  const row=document.createElement('div'); row.className='row';
+  el.appendChild(sec); el.appendChild(row);
+  const cells=[];
+  for(const app of apps){
+    const div=document.createElement('div'); div.className='card app-tile';
+    div.innerHTML=`<div class=ic>${app.icon}</div><div class=nm>${app.label}</div>`;
+    const go=()=>{tvToast('Abrindo '+app.label+'…');
+      fetch('/api/app',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:app.id})});};
+    div.onclick=go;
+    row.appendChild(div); cells.push({el:div,item:{_app:go}});
+  }
+  for(const rowCells of chunkByRow(cells)) grid.push(rowCells);
+  selectContent(0,0);
+}
+
+async function renderSearchScreen(q){
+  const secEl0=document.getElementById('sections'); secEl0.innerHTML='';
+  grid=[]; r=0; c=0;
+
+  const bar=document.createElement('div'); bar.id='search-bar';
+  bar.innerHTML=`<span class=ic>🔍</span><span>${q||''}</span><span class=cursor></span>`;
+  secEl0.appendChild(bar);
+
+  if(!q){
+    const hist=getHist();
+    if(hist.length){
+      const sec=document.createElement('div'); sec.className='sec'; sec.textContent='Buscas recentes';
+      const row=document.createElement('div'); row.className='row scroll';
+      secEl0.appendChild(sec); secEl0.appendChild(row);
+      const cells=[];
+      for(const term of hist){
+        const chip=document.createElement('div'); chip.className='hchip'; chip.textContent=term;
+        chip.onclick=()=>{ fetch('/api/search-query',{method:'POST',headers:{'Content-Type':'application/json'},
+          body:JSON.stringify({q:term})}); lastQuery=term; renderSearchScreen(term); };
+        row.appendChild(chip); cells.push({el:chip,item:{term}});
+      }
+      grid.push(cells);
+    }
+    selectContent(0,0);
+    return;
+  }
+
+  const [movies,series,artists]=await Promise.all([
+    fetch('/api/search?q='+encodeURIComponent(q)).then(x=>x.json()).catch(()=>[]),
+    fetch('/api/search-series?q='+encodeURIComponent(q)).then(x=>x.json()).catch(()=>[]),
+    fetch('/api/search-music?q='+encodeURIComponent(q)).then(x=>x.json()).catch(()=>[]),
+  ]);
+  for(const [label,kind,items] of [['Filmes','movie',movies],['Séries','series',series],['Música','music',artists]]){
+    if(!items.length) continue;
+    const sec=document.createElement('div'); sec.className='sec'; sec.textContent=label;
+    const row=document.createElement('div'); row.className='row scroll';
+    secEl0.appendChild(sec); secEl0.appendChild(row);
+    const cells=[];
+    for(const item of items){
+      const el=tvSearchCard(item,kind); row.appendChild(el);
+      const it={...item,_kind:kind};
+      el.onclick=()=>openSearchDetail(kind,it);
+      cells.push({el,item:it});
+    }
+    grid.push(cells);
+  }
+  if(!movies.length && !series.length && !artists.length){
+    const empty=document.createElement('div'); empty.className='empty'; empty.textContent='nada encontrado';
+    secEl0.appendChild(empty);
+  }
+  selectContent(0,0);
+}
+
+function initSearchScreen(){
+  fetch('/api/search-query',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({q:''})});
+  lastQuery='';
+  renderSearchScreen('');
+}
+
+// poll unico e permanente: se o celular comecar a digitar em QUALQUER tela,
+// pula sozinho pra Busca (nao precisa navegar ate la primeiro)
+function watchSearchQuery(){
+  setInterval(async ()=>{
+    const {q}=await fetch('/api/search-query').then(x=>x.json()).catch(()=>({q:lastQuery}));
+    if(q===lastQuery) return;
+    lastQuery=q;
+    if(q && CATS[navIdx].id!=='search'){
+      navIdx=CATS.findIndex(c=>c.id==='search');
+      zone='content'; renderNav(); prevCatId='search';
+      document.getElementById('hero').classList.remove('on');
+    }
+    if(CATS[navIdx].id==='search') renderSearchScreen(q);
+  },500);
+}
+
+async function loadHero(){
+  const hero=document.getElementById('hero');
+  const recent=cache['/api/recent']||(cache['/api/recent']=await fetch('/api/recent').then(x=>x.json()).catch(()=>[]));
+  const top=recent[0];
+  if(!top){ hero.classList.remove('on'); return; }
+  hero.classList.add('on');
+  hero.style.backgroundImage=top.cover?`url(${top.cover})`:'';
+  document.getElementById('hero-title').textContent=top.name||top.label||'';
+  document.getElementById('hero-meta').textContent=top.system
+    ? `Continuar jogando · ${top.label||top.system}` : 'Continuar assistindo';
+  let d={};
+  try{
+    d=top.system
+      ? await fetch(`/api/gamedetail?name=${encodeURIComponent(top.name)}&system=${top.system}`).then(x=>x.json())
+      : {};
+    if(d.backdrop) hero.style.backgroundImage=`url(${d.backdrop})`;
+  }catch(_){}
+}
+
+async function loadCat(id){
+  const cat=CATS.find(x=>x.id===id);
+  const secEl0=document.getElementById('sections'); secEl0.innerHTML='';
+  document.getElementById('hero').classList.remove('on');
+  if(prevCatId==='search' && id!=='search') pushHist(lastQuery);
+  prevCatId=id;
+  if(dlPollT){ clearInterval(dlPollT); dlPollT=null; }
+  if(id==='search'){ grid=[]; r=0; c=0; initSearchScreen(); return; }
+  if(id==='downloads'){ grid=[]; r=0; c=0; initDownloadsScreen(); return; }
+  if(id==='apps'){ grid=[]; r=0; c=0; initAppsScreen(); return; }
+  if(id==='home') loadHero();
+  grid=[]; r=0; c=0;
+  for(const sec of cat.sections){
+    const items=cache[sec.url]||(cache[sec.url]=await fetch(sec.url).then(x=>x.json()).catch(()=>[]));
+    const secEl=document.createElement('div'); secEl.className='sec'; secEl.textContent=sec.label;
+    const row=document.createElement('div'); row.className='row'+(sec.scroll?' scroll':'');
+    secEl0.appendChild(secEl); secEl0.appendChild(row);
+    if(!items.length){ row.replaceWith(Object.assign(document.createElement('div'),
+      {className:'empty',textContent:'nada por aqui ainda'})); continue; }
+    const cells=[];
+    for(const item of items){ const el=cardEl(item); row.appendChild(el);
+      el.onclick=()=>launch(item); cells.push({el,item}); }
+    if(sec.scroll) grid.push(cells);
+    else for(const rowCells of chunkByRow(cells)) grid.push(rowCells);
+  }
+  selectContent(0,0);
+}
+
+document.getElementById('detail-play').onclick=detailAct;
+
+document.addEventListener('keydown',ev=>{
+  if(zone==='detail'){
+    if(ev.key==='Enter'){detailAct();}
+    else if(ev.key==='Escape'){closeDetail();}
+    else return;
+    ev.preventDefault(); return;
+  }
+  if(zone==='nav'){
+    if(ev.key==='ArrowDown'){navIdx=Math.min(CATS.length-1,navIdx+1);renderNav();loadCat(CATS[navIdx].id);}
+    else if(ev.key==='ArrowUp'){navIdx=Math.max(0,navIdx-1);renderNav();loadCat(CATS[navIdx].id);}
+    else if(ev.key==='ArrowRight'||ev.key==='Enter'){zone='content';renderNav();}
+    else return;
+    ev.preventDefault(); return;
+  }
+  if(ev.key==='ArrowRight'){selectContent(r,c+1);ev.preventDefault();}
+  else if(ev.key==='ArrowLeft'){selectContent(r,c-1);ev.preventDefault();}
+  else if(ev.key==='ArrowDown'){selectContent(r+1,c);ev.preventDefault();}
+  else if(ev.key==='ArrowUp'){selectContent(r-1,c);ev.preventDefault();}
+  else if(ev.key==='Enter'){
+    const cur=grid[r]&&grid[r][c]; if(!cur) return;
+    if(cur.item._kind) openSearchDetail(cur.item._kind,cur.item);
+    else if(cur.item._app) cur.item._app();
+    else if(cur.item.term!==undefined) cur.el.onclick();
+    else if(launchable(cur.item)) openDetail(cur.item);
+  }
+});
+
+renderNav();
+loadCat('home');
+watchSearchQuery();
+</script>
+</body></html>"""
+
+
 class Handler(BaseHTTPRequestHandler):
     def log_message(self, *a):
         pass
@@ -1649,6 +2428,15 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_GET(self):
         path = urlparse(self.path).path
+        if path == "/home":
+            # tela da TV (kiosk local) -- nao passa pelo login do celular
+            body = HOME_PAGE.encode()
+            self.send_response(200)
+            self.send_header("Content-Type", "text/html; charset=utf-8")
+            self.send_header("Cache-Control", "no-store")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            return self.wfile.write(body)
         if not self._authed():
             # login form only at the root; everything else gets a clean 401
             if PASSWORD and (path == "/" or path == ""):
@@ -1726,6 +2514,15 @@ class Handler(BaseHTTPRequestHandler):
                 self._json(search_series(term) if term else [])
             except Exception:
                 self._json([])
+        elif path == "/api/search-music":
+            qs = parse_qs(urlparse(self.path).query)
+            term = qs.get("q", [""])[0]
+            try:
+                self._json(search_music(term) if term else [])
+            except Exception:
+                self._json([])
+        elif path == "/api/search-query":
+            self._json({"q": STATE["query"]})
         elif path == "/api/downloads":
             self._json(get_downloads())
         elif path == "/img":
@@ -1807,7 +2604,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.send_response(404); self.end_headers()
         elif path == "/api/status":
             g = running_game()
-            # kind: 'game' (gamepad) | 'media' (controle de video) | None
+            # kind: 'game' (gamepad) | 'media' (controle de video) | 'home' (kiosk da TV, nada rodando)
             if g == "mpv":
                 now = mpv_now_playing() or {}
                 now["cover"] = STATE["cover"]
@@ -1816,7 +2613,7 @@ class Handler(BaseHTTPRequestHandler):
             elif g:
                 self._json({"running": True, "kind": "game", "current": g})
             else:
-                self._json({"running": False, "kind": None})
+                self._json({"running": False, "kind": "home"})
         elif path.startswith("/cover/"):
             _, _, sysname, stem = path.split("/", 3)
             stem = urllib.parse.unquote(stem)
@@ -1874,6 +2671,19 @@ class Handler(BaseHTTPRequestHandler):
                 self.send_response(204); self.end_headers()
             except Exception:
                 self.send_response(400); self.end_headers()
+
+        elif path == "/api/remote":
+            try:
+                code = REMOTE_KEYS[d["key"]]
+                KBD.write(e.EV_KEY, code, 1); KBD.syn()
+                KBD.write(e.EV_KEY, code, 0); KBD.syn()
+                self._json({"ok": True})
+            except Exception:
+                self._json({"ok": False}, 400)
+
+        elif path == "/api/search-query":
+            STATE["query"] = (d.get("q") or "")[:200]
+            self._json({"ok": True})
 
         elif path == "/api/launch":
             sysname = d.get("system"); rom = d.get("path")
@@ -1941,10 +2751,22 @@ class Handler(BaseHTTPRequestHandler):
                 self._json({"ok": "already" in msg.lower() or "exist" in msg.lower(),
                             "error": msg[:120]}, 200)
 
+        elif path == "/api/request-music":
+            try:
+                request_artist(d.get("mbid"))
+                self._json({"ok": True})
+            except Exception as ex:
+                msg = str(ex)
+                self._json({"ok": "already" in msg.lower() or "exist" in msg.lower(),
+                            "error": msg[:120]}, 200)
+
         elif path == "/api/stop":
             subprocess.run(["stop-game"])
             STATE["cover"] = None
             STATE["mkind"] = None
+            # TZ explicito: o Librewolf cacheia o fuso ao iniciar e nao reflete
+            # mudanca de timezone do sistema mesmo em processo novo
+            sway_exec("env TZ=America/Sao_Paulo librewolf --kiosk http://localhost:8100/home")
             self._json({"ok": True})
         else:
             self.send_response(404); self.end_headers()

@@ -1,0 +1,14 @@
+#!/bin/bash
+# Lanca o Spotify e move o audio dele pro sink com EQ (effect_input.spotify-eq).
+# PULSE_SINK nao funciona -- o client fala PipeWire nativo, nao a camada Pulse.
+before=$(pactl list short sink-inputs | cut -f1 | sort)
+spotify-launcher &
+for i in $(seq 1 30); do
+  sleep 1
+  now=$(pactl list short sink-inputs | cut -f1 | sort)
+  new=$(comm -13 <(echo "$before") <(echo "$now"))
+  if [ -n "$new" ]; then
+    for id in $new; do pactl move-sink-input "$id" effect_input.spotify-eq; done
+    break
+  fi
+done
