@@ -21,8 +21,27 @@ MEDIA = os.environ.get("OIKOS_MEDIA", "/media")
 # Either one, once accepted, is remembered in the `oikos` cookie.
 TOKEN = os.environ.get("OIKOS_TOKEN", "")
 PASSWORD = os.environ.get("OIKOS_PASSWORD", "")
+# Optional: a hyprpad instance (github.com/harbefas/hyprpad) running on a desktop.
+# OIKOS_HYPRPAD=http://desktop:8123 -> a "PC" tab that embeds it, so the phone
+# only ever opens one page. Unset = no tab. OIKOS_HYPRPAD_TOKEN if it has one.
+HYPRPAD = os.environ.get("OIKOS_HYPRPAD", "").strip().rstrip("/")
+if HYPRPAD and os.environ.get("OIKOS_HYPRPAD_TOKEN", "").strip():
+    HYPRPAD += "?t=" + urllib.parse.quote(os.environ["OIKOS_HYPRPAD_TOKEN"].strip())
 PWHASH = hashlib.sha256(PASSWORD.encode()).hexdigest() if PASSWORD else ""
 STATE = {"cover": None, "mkind": None, "query": ""}   # cover/mkind: /api/play; query: teclado do celular -> busca na TV
+
+
+def hyprpad_up():
+    """True se o hyprpad configurado atende (TCP). Barato: so abre e fecha."""
+    if not HYPRPAD:
+        return False
+    u = urlparse(HYPRPAD)
+    try:
+        socket.create_connection(
+            (u.hostname, u.port or (443 if u.scheme == "https" else 80)), 0.4).close()
+        return True
+    except OSError:
+        return False
 
 
 def mpv_cmd(command):
@@ -746,6 +765,8 @@ html,body{height:100%;color:#eef1f6;overflow:hidden;
 #app{position:fixed;inset:0;overflow-y:auto;-webkit-overflow-scrolling:touch}
 .view{display:none;min-height:100%}
 .view.on{display:block}
+#v-pc.on{position:absolute;inset:0;min-height:0}
+#pcframe{border:0;width:100%;height:100%;display:block}
 /* tab bar translucida (glass) */
 #tabs{position:fixed;bottom:0;left:0;right:0;height:64px;display:flex;z-index:18;
   background:#12151cd8;backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);
@@ -1148,6 +1169,9 @@ body[data-p="2"] #pnum{color:var(--p2)}
     <div id=apps></div>
   </div>
 
+  <!-- hyprpad embutido (so aparece se OIKOS_HYPRPAD estiver setado e de pe) -->
+  <div class="view" id=v-pc><iframe id=pcframe allow="microphone" referrerpolicy=no-referrer></iframe></div>
+
 </div>
 
 <div id=eplist><div id=ephead><span id=eptitle></span><button onclick="closeEps()">✕</button></div><div id=eps></div></div>
@@ -1231,6 +1255,7 @@ body[data-p="2"] #pnum{color:var(--p2)}
   <button data-tab=search><span class=i>🔍</span>Busca</button>
   <button data-tab=apps><span class=i>⚙️</span>Apps</button>
   <button data-tab=pad><span class=i>🎮</span>Controle</button>
+  <button data-tab=pc style=display:none><span class=i>🖥</span>PC</button>
 </div>
 <div id=tabgrip><i></i></div>
 
@@ -1245,7 +1270,7 @@ const P = new URLSearchParams(location.search).get('p') === '2' ? 2 : 1;
 document.body.dataset.p = P;
 
 // ---------- navegacao de abas ----------
-const TABS=['games','movies','series','music','apps','search'];
+const TABS=['games','movies','series','music','apps','search','pc'];
 const views={};
 for(const t of TABS) views[t]=document.getElementById('v-'+t);
 views.pad=document.getElementById('pad');
@@ -1262,9 +1287,26 @@ function showTab(t){
   if(t==='movies' && !loaded.movies){ loaded.movies=1; loadMovies(); }
   if(t==='series' && !loaded.series){ loaded.series=1; loadSeries(); }
   if(t==='music'  && !loaded.music ){ loaded.music =1; loadMusic();  }
+  // hyprpad so carrega quando a aba abre a 1a vez (senao fica pollando em background)
+  if(t==='pc'){ if(!loaded.pc){ loaded.pc=1; document.getElementById('pcframe').src=PC_URL; } hideTabs(); }
 }
 for(const b of document.querySelectorAll('#tabs button'))
   b.onclick=()=>showTab(b.dataset.tab);
+
+// ---------- aba PC (hyprpad, opcional) ----------
+let PC_URL='';
+const pcBtn=document.querySelector('#tabs button[data-tab=pc]');
+async function checkPC(){
+  const r=await fetch('/api/hyprpad').then(r=>r.json()).catch(()=>({}));
+  // o iframe carrega no celular, entao localhost (que so faz sentido pro hub)
+  // vira o mesmo host por onde o celular chegou aqui -- IP da LAN ou nome Tailscale
+  PC_URL=(r.url||'').replace(/^(https?:\/\/)(localhost|127\.0\.0\.1)(?=[:\/]|$)/,
+                             (m,s)=>s+location.hostname);
+  pcBtn.style.display = r.up ? '' : 'none';
+  if(!r.up && pcBtn.classList.contains('on')) showTab('games');
+}
+checkPC(); setInterval(checkPC,15000);
+
 
 // --- barra de menu auto-escondida (aparece so quando chamada) ---
 const _tabs=document.getElementById('tabs'); let _tabsT=null;
@@ -2468,6 +2510,8 @@ class Handler(BaseHTTPRequestHandler):
             self.wfile.write(ICON_PNG)
         elif path == "/api/games":
             self._json(list_games() + list_steam())
+        elif path == "/api/hyprpad":
+            self._json({"url": HYPRPAD, "up": hyprpad_up()})
         elif path == "/api/apps":
             self._json(APPS)
         elif path == "/api/recent":

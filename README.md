@@ -137,6 +137,25 @@ variables, so you can override them in the systemd unit without editing code:
 | Auth token | *(none)* | `TOKEN` | `OIKOS_TOKEN` |
 | mpv user home | *(current user)* | — | `OIKOS_HOME` |
 | Steam library | `<OIKOS_HOME>/.local/share/Steam` | `STEAM_ROOT` | `OIKOS_STEAM` |
+| hyprpad instance | *(none)* | `HYPRPAD` | `OIKOS_HYPRPAD` (+ `OIKOS_HYPRPAD_TOKEN`) |
+
+### PC tab (optional, hyprpad)
+
+[hyprpad](https://github.com/harbefas/hyprpad) turns the phone into the mouse and
+keyboard of a Wayland desktop. Set `OIKOS_HYPRPAD` to its URL
+(`http://desktop:8123`) and the hub grows a **PC** tab that embeds it, so the phone
+opens one page instead of two. The tab only shows while that host answers (probed
+every 15s) and the frame loads on first open, not on page load.
+
+Running hyprpad on the same box as the hub (so the phone drives the TV's own
+session)? `OIKOS_HYPRPAD=http://localhost:8123` — the page rewrites `localhost` to
+whatever host the phone used to reach the hub, since the frame loads on the phone,
+not on the server. Point it at another machine's address to control that one instead.
+
+Two gotchas: the browser blocks an `http://` frame inside an `https://` page — serve
+both the same way (`tailscale serve` on each, or plain HTTP on both) — and hyprpad's
+Voice button needs the microphone, which needs hyprpad on HTTPS. Everything else
+works over plain HTTP on the LAN.
 
 `OIKOS_HOME` only matters if the hub runs as a different user than mpv (e.g. the hub
 as root, mpv as your desktop user): point it at that user's home so "continue
