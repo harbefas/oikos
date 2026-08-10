@@ -9,12 +9,19 @@ Estende o padserver. Alem de servir os gamepads virtuais (uinput), oferece:
 Lanca via `swaymsg exec` na sessao Sway. Sem app no celular.
 """
 import hashlib, json, os, re, socket, struct, subprocess, urllib.parse, urllib.request, zlib
+from datetime import datetime
 from urllib.parse import urlparse, parse_qs
 
 MPV_SOCK = "/tmp/mpv.sock"
 # Paths and the optional auth token are env-configurable so you don't have to edit
 # code. Defaults are English; override any of them in the systemd unit or shell.
 MEDIA = os.environ.get("OIKOS_MEDIA", "/media")
+# Wallpaper pack shown on the Home Screen when idle -- same pack/hour-naming convention
+# as github.com/mateCreations/omarchy-dynamic-wallpaper, so the TV follows the same
+# time-of-day image as the desktop/phone.
+WALLPAPER_DIR = os.environ.get(
+    "OIKOS_WALLPAPER",
+    os.path.expanduser("~/omarchy-dynamic-wallpaper/backgrounds/cliffs"))
 # Auth (all optional; unset both = open on LAN):
 #   OIKOS_PASSWORD -> a login screen with a password field
 #   OIKOS_TOKEN    -> a URL token (?t=), handy for a bookmark, no form
@@ -322,6 +329,49 @@ def sway_exec(cmd):
     else:
         env["SWAYSOCK"] = swaysock()
         subprocess.run(["swaymsg", "exec", cmd], env=env, stdout=dn, stderr=dn)
+
+
+def focused_app():
+    """app_id/classe da janela focada (Sway ou Hyprland), em minusculas; "" se nao houver
+    compositor rodando ou o foco nao puder ser lido. Usado pra saber se algo esta na frente
+    do kiosk da Home Screen (filme, jogo, Steam, Spotify...) sem ter que listar cada app."""
+    try:
+        if subprocess.run(["pgrep", "-x", "Hyprland"], capture_output=True).returncode == 0:
+            out = subprocess.run(["hyprctl", "-j", "activewindow"],
+                                  capture_output=True, text=True, timeout=2).stdout
+            return (json.loads(out).get("class") or "").lower()
+        env = {**os.environ, "SWAYSOCK": swaysock()}
+        out = subprocess.run(["swaymsg", "-t", "get_tree"],
+                              capture_output=True, text=True, env=env, timeout=2).stdout
+        def walk(node):
+            if node.get("focused"):
+                return node.get("app_id") or (node.get("window_properties") or {}).get("class") or ""
+            for child in node.get("nodes", []) + node.get("floating_nodes", []):
+                found = walk(child)
+                if found:
+                    return found
+            return ""
+        return walk(json.loads(out)).lower()
+    except Exception:
+        return ""
+
+
+def current_wallpaper():
+    """Imagem do WALLPAPER_DIR (nomeadas por hora, ex. 6.jpg) mais proxima <= hora atual;
+    mesma logica do dynamic-wallpaper (github.com/mateCreations/omarchy-dynamic-wallpaper)."""
+    if not os.path.isdir(WALLPAPER_DIR):
+        return None
+    hour = datetime.now().hour
+    imgs = []
+    for f in os.listdir(WALLPAPER_DIR):
+        stem, ext = os.path.splitext(f)
+        if ext.lower() in (".jpg", ".jpeg", ".png") and stem.isdigit():
+            imgs.append((int(stem), f))
+    if not imgs:
+        return None
+    below = [x for x in imgs if x[0] <= hour]
+    best = max(below or imgs, key=lambda x: x[0])
+    return os.path.join(WALLPAPER_DIR, best[1])
 
 
 def list_games():
@@ -1307,7 +1357,6 @@ async function checkPC(){
 }
 checkPC(); setInterval(checkPC,15000);
 
-
 // --- barra de menu auto-escondida (aparece so quando chamada) ---
 const _tabs=document.getElementById('tabs'); let _tabsT=null;
 function hideTabs(){_tabs.classList.remove('show');clearTimeout(_tabsT);}
@@ -2004,6 +2053,11 @@ body.nav-open #main{left:132px}
 .dl-row .dpct{width:52px;text-align:right;font-size:13px;color:var(--tx-2);
   font-variant-numeric:tabular-nums}
 /* toast (confirmacao de "pedir pra baixar") */
+/* wallpaper de idle -- mesmo pack/hora do omarchy e do celular, some no primeiro input */
+#wallpaper-idle{position:fixed;inset:0;z-index:40;background:#000;
+  opacity:0;pointer-events:none;transition:opacity 1.2s var(--ease)}
+#wallpaper-idle.on{opacity:1;pointer-events:auto}
+#wallpaper-idle img{width:100%;height:100%;object-fit:cover}
 #tv-toast{position:fixed;bottom:44px;left:50%;transform:translateX(-50%) translateY(20px);
   background:var(--surface);border:1px solid var(--border);color:var(--tx);
   padding:16px 30px;border-radius:12px;font-size:16px;font-weight:600;
@@ -2035,6 +2089,7 @@ body.nav-open #main{left:132px}
   </div>
 </div>
 <div id=tv-toast></div>
+<div id=wallpaper-idle><img id=wallpaper-idle-img></div>
 <script>
 // tema Yerba Mate: Terere (6h-18h) / Cimarrao (18h-6h), igual ao Hub do celular
 // (hora em America/Sao_Paulo via Intl, mesmo motivo do relogio: nao confia no fuso do sistema)
@@ -2405,6 +2460,31 @@ document.addEventListener('keydown',ev=>{
   }
 });
 
+// wallpaper de idle: mesmo pack por hora do omarchy/celular (omarchy-dynamic-wallpaper),
+// aparece so quando nada mais esta em foco no Sway (filme, jogo, Steam, Spotify...) e
+// sem input ha IDLE_MS; some no primeiro toque/tecla, que fica so pra fechar a wallpaper.
+const IDLE_MS=5*60*1000;
+let lastInput=Date.now();
+function dismissIdle(ev){
+  const el=document.getElementById('wallpaper-idle');
+  lastInput=Date.now();
+  if(el.classList.contains('on')){
+    el.classList.remove('on');
+    ev.stopPropagation();
+    if(ev.cancelable) ev.preventDefault();
+  }
+}
+document.addEventListener('keydown',dismissIdle,{capture:true});
+document.addEventListener('touchstart',dismissIdle,{capture:true});
+document.addEventListener('click',dismissIdle,{capture:true});
+setInterval(async ()=>{
+  const el=document.getElementById('wallpaper-idle');
+  if(Date.now()-lastInput<IDLE_MS){ el.classList.remove('on'); return; }
+  const {idle}=await fetch('/api/idle').then(x=>x.json()).catch(()=>({idle:false}));
+  if(idle){ document.getElementById('wallpaper-idle-img').src='/wallpaper?_='+Date.now(); el.classList.add('on'); }
+  else el.classList.remove('on');
+},20000);
+
 renderNav();
 loadCat('home');
 watchSearchQuery();
@@ -2658,6 +2738,23 @@ class Handler(BaseHTTPRequestHandler):
                 self._json({"running": True, "kind": "game", "current": g})
             else:
                 self._json({"running": False, "kind": "home"})
+        elif path == "/api/idle":
+            # usado so pela Home Screen: "idle" = nada em foco alem do proprio kiosk
+            # (filme, jogo, Steam, Spotify... qualquer janela por cima conta como "nao idle")
+            app = focused_app()
+            self._json({"idle": app == "" or "librewolf" in app})
+        elif path == "/wallpaper":
+            f = current_wallpaper()
+            if f and os.path.exists(f):
+                data = open(f, "rb").read()
+                self.send_response(200)
+                self.send_header("Content-Type", "image/png" if f.lower().endswith(".png") else "image/jpeg")
+                self.send_header("Cache-Control", "no-store")
+                self.send_header("Content-Length", str(len(data)))
+                self.end_headers()
+                self.wfile.write(data)
+            else:
+                self.send_response(404); self.end_headers()
         elif path.startswith("/cover/"):
             _, _, sysname, stem = path.split("/", 3)
             stem = urllib.parse.unquote(stem)
