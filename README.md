@@ -10,6 +10,10 @@ tap a game cover to launch it on the TV with your phone as the gamepad, or tap a
 movie and the same page becomes the remote. Behind it, a full media stack
 (Jellyfin + the *arr* apps) finds, downloads and organizes everything.
 
+The TV itself also gets its own surface: the **Home Screen**, a kiosk page that
+opens on boot and browses like a streaming app (Netflix-style sidebar), driven
+entirely by a d-pad sent from the phone — no remote, no keyboard on the TV.
+
 ```
         phone browser  ──►  Console Hub  (:8100, one Python file)
                                  │
@@ -18,18 +22,24 @@ movie and the same page becomes the remote. Behind it, a full media stack
    uinput gamepad          mpv on the TV               Jellyfin / Radarr /
    → PCSX2 / RetroArch      (IPC socket)                Sonarr / Lidarr APIs
    (games on the TV)       (movies · series · music)   (catalog · search · get)
+
+        TV kiosk browser  ──►  Home Screen  (same server, /home)
+                                 │
+                     d-pad + search keystrokes, streamed live
+                     from the phone's Controle tab (/api/remote,
+                     /api/search-query) — the TV has no input of its own
 ```
 
 The hub is the surface; the homelab underneath does the work. It is not a standalone
-app — it launches emulators, `mpv` and the *arr* apps, so those have to be there. The
-setup below stands the whole thing up; the hub is one component of it, installed along
-the way.
+app — it launches emulators, `mpv`, the *arr* apps and the kiosk browser itself, so
+those have to be there. The setup below stands the whole thing up; the hub is one
+component of it, installed along the way.
 
 ## Repo layout
 
 | Path | What |
 |------|------|
-| [`hub/`](hub/) | **Console Hub** — the phone control surface (`console-hub.py`) + the launcher scripts it shells out to |
+| [`hub/`](hub/) | **Console Hub** (phone, `/`) and **Home Screen** (TV, `/home`) — both served by `console-hub.py` — + the launcher scripts it shells out to |
 | [`homelab/`](homelab/) | The stack: Arch `bootstrap-arch.sh`, `docker-compose.yml`, and an agent prompt that wires it all |
 | [`emulators/`](emulators/) | Retro gaming: the virtual-gamepad autoconfig, RetroArch/PCSX2 setup, cover fetcher |
 
@@ -67,17 +77,24 @@ plus [`python-evdev`](https://pypi.org/project/evdev/). No app, no HTTPS require
   library (launched via `steam://`). Tap to launch;
   the phone turns into a virtual gamepad (two analog sticks, d-pad with diagonals,
   L1/L2/R1/R2, turbo, a d-pad/analog swap). Two players via `?p=2`. Locks to landscape.
-- **Desktop** — use the phone as a real **mouse + keyboard** for the box (uinput):
-  a trackpad, the phone's native keyboard, modifier keys for shortcuts, and an
-  on-demand live screen view (`grim`). Split left/right in landscape, stacked in portrait.
-- **Movies / Series** — posters pulled from Jellyfin as a catalog, played with
-  **mpv** on the TV (not Jellyfin's own player). Built-in search adds titles to
-  Radarr/Sonarr and shows live download progress (a tiny Jellyseerr).
-- **Music** — albums from a folder, played as an mpv playlist.
+- **Movies / Series / Music** — posters pulled from Jellyfin as a catalog, played with
+  **mpv** on the TV (not Jellyfin's own player).
+- **Apps** — a grid of one-tap launchers for anything else on the box: Jellyfin's own
+  web UI, Navidrome, Kodi, Spotify (native client) — whatever you add to the `APPS`
+  list. Launching one closes the Home Screen kiosk first (see below), so it always
+  gets the full screen.
+- **Busca** — search across Radarr (movies), Sonarr (series) **and Lidarr (music)**
+  at once, each result showing synopsis/genres/rating pulled straight from the
+  lookup, with a "＋ download" action (or "already in your library"). A tiny
+  Jellyseerr, three services deep. Browsing the Music tab itself has no search box
+  on purpose — see [Notes](#notes).
 - **Media remote** — the same page becomes play/pause, seek, volume, audio/subtitle
-  cycling and prev/next, over mpv's IPC socket. It switches between gamepad and
-  remote automatically based on what is running. The now-playing cover fills the
-  background, and subtitle/audio delay steppers fix lip-sync from the couch.
+  cycling and prev/next, over mpv's IPC socket. The Controle tab is **contextual**: a
+  gamepad while a game runs, this media remote while something plays, or a d-pad for
+  the TV's Home Screen the rest of the time — driven by `/api/status`'s `kind`. The
+  now-playing cover fills the background, and subtitle/audio delay steppers fix
+  lip-sync from the couch. A "✕ Close everything" button kills whatever's in the
+  foreground (game, media or app) and brings the Home Screen back.
 - **Continue watching** — a row of films you left partway, read from mpv's saved
   positions (matched to the library by hash, so it carries the real poster). Tap to
   resume where you stopped.
@@ -85,15 +102,18 @@ plus [`python-evdev`](https://pypi.org/project/evdev/). No app, no HTTPS require
   the phone, refreshing every couple of seconds. Debugging what is on screen without
   getting up, and handy when the set is in another room.
 
+Mouse/keyboard control of the box itself (not the TV apps) was extracted to a
+sibling project: [**hyprpad**](https://github.com/harbefas/hyprpad).
+
 ### Requirements
 
 - Linux with a **Sway or Hyprland** session on the TV (autologin on a TTY works well);
   it launches through `swaymsg` or `hyprctl` depending on which is running
 - Python 3 and `python-evdev`; `mpv` for video/music; emulators you want (`pcsx2`, `retroarch`)
-- For movies/series: the catalog/download stack on localhost — Jellyfin (`:8096`),
-  Radarr (`:7878`), Sonarr (`:8989`). (The games tab doesn't use these, but it still
-  needs the emulators, launchers and gamepad autoconfig — see
-  [`emulators/`](emulators/).)
+- For movies/series/music: the catalog/download stack on localhost — Jellyfin
+  (`:8096`), Radarr (`:7878`), Sonarr (`:8989`), Lidarr (`:8686`). (The games tab
+  doesn't use these, but it still needs the emulators, launchers and gamepad
+  autoconfig — see [`emulators/`](emulators/).)
 - For the gamepad, the user needs access to `/dev/uinput` (be in the `input` group
   with a udev rule granting it). Without it the hub still runs, just with the gamepad
   disabled, so you can develop the media side on any desktop.
@@ -112,7 +132,7 @@ variables, so you can override them in the systemd unit without editing code:
 | mpv IPC socket | `/tmp/mpv.sock` | `MPV_SOCK` | — |
 | Port | `8100` | `PORT` | — |
 | Jellyfin | `http://localhost:8096` | `JF` | — |
-| Radarr / Sonarr | `http://localhost:{7878,8989}` | `RADARR` / `SONARR` | — |
+| Radarr / Sonarr / Lidarr | `http://localhost:{7878,8989,8686}` | `RADARR` / `SONARR` / `LIDARR` | — |
 | Login password | *(none)* | `PASSWORD` | `OIKOS_PASSWORD` |
 | Auth token | *(none)* | `TOKEN` | `OIKOS_TOKEN` |
 | mpv user home | *(current user)* | — | `OIKOS_HOME` |
@@ -132,6 +152,7 @@ API keys are **never hardcoded** — pass them or point at a file, per service:
 | Jellyfin | `OIKOS_JF_KEY` | `OIKOS_JF_KEY_FILE` | `/srv/jellyfin/console-hub.key` |
 | Radarr | `OIKOS_RADARR_KEY` | `OIKOS_RADARR_KEY_FILE` | (legacy path) |
 | Sonarr | `OIKOS_SONARR_KEY` | `OIKOS_SONARR_KEY_FILE` | `docker exec sonarr` fallback |
+| Lidarr | `OIKOS_LIDARR_KEY` | `OIKOS_LIDARR_KEY_FILE` | `docker exec lidarr` fallback |
 
 With the compose stack, point the `*_KEY_FILE` vars at each container's `config.xml`
 (e.g. `homelab/config/radarr/config.xml`) and `OIKOS_JF_KEY_FILE` at the `jf.key`
@@ -142,6 +163,12 @@ The launchers in [`hub/scripts/`](hub/scripts/) (`run-ps2`, `run-n64`, `play-vid
 They assume `XDG_RUNTIME_DIR=/run/user/1000` (uid 1000) and `WAYLAND_DISPLAY=wayland-1` —
 adjust for your user. `play-video` carries the hardware-decode and audio tuning
 (`LIBVA_DRIVER_NAME=iHD` for Intel iGPUs; change for AMD/NVIDIA).
+
+`stop-game` is called before **every** launch — game, media, or an app from the
+`APPS` list — and kills whatever else is currently in the foreground (emulators,
+`mpv`, and any app process named in `APPS`, including the Home Screen kiosk
+browser itself). Only one thing owns the screen at a time; add a new app's
+process name to it if `pkill -x` doesn't find it under its own binary name.
 
 ### Run as a service
 
@@ -163,6 +190,56 @@ WantedBy=multi-user.target
 ```bash
 sudo systemctl enable --now console-hub
 ```
+
+---
+
+## Home Screen
+
+The TV's own surface, at `/home` on the same server — a kiosk page for whoever's
+on the couch without their phone out. There's no keyboard or mouse on the TV, so
+every interaction is remote:
+
+- **Sidebar** (Início/Movies/Series/Music/Games/Search/Downloads/Apps) — hidden by
+  default, slides in and pushes the content over (doesn't overlay it) when you
+  press left from the leftmost card. Categories switch live while you browse the
+  sidebar, no need to confirm with OK.
+- **Search** spans Radarr + Sonarr + Lidarr together, same as the phone's Busca
+  tab. There's no keyboard on the TV to type with — the query is typed **on the
+  phone** (a text field in the Controle tab) and streamed to the TV live via
+  polling (`/api/search-query`); the TV jumps to the Search screen by itself the
+  moment you start typing, from anywhere. Selecting a result opens the same detail
+  view as a local item, synopsis and all, with a "download" action in place of
+  "play".
+- **Downloads** is a read-only queue view (Radarr+Sonarr+Lidarr, reuses
+  `/api/downloads`).
+- **Apps** is the same `APPS` grid as the phone's Apps tab.
+- The remote itself lives in the phone's existing **Controle** tab, not a
+  separate one — it's contextual (`/api/status`'s `kind`): a d-pad + search field
+  while the Home Screen is up, the gamepad or media remote when a game or video is
+  running instead.
+
+### How the remote works
+
+A second virtual input device (`KBD`, a `uinput` keyboard alongside the existing
+gamepad) sends `KEY_UP/DOWN/LEFT/RIGHT/ENTER/ESC` on `POST /api/remote`
+`{"key": "up"|"down"|"left"|"right"|"ok"|"back"}`. Same `/dev/uinput` requirement
+as the gamepad.
+
+### Autostart
+
+Add the kiosk to your compositor's autostart so it's there after every reboot,
+not just after the hub relaunches it. Sway (`~/.config/sway/config`):
+
+```
+exec sh -c "sleep 3; librewolf --kiosk http://localhost:8100/home"
+```
+
+The `sleep` gives `console-hub.py` time to be listening before the browser
+requests the page. Firefox/Librewolf don't reliably pick up the host's timezone
+in kiosk mode (even with `TZ` set on a fresh process) — the clock and day/night
+theme use `Intl.DateTimeFormat` with an explicit `timeZone` instead of trusting
+the system one; change it in `hub/console-hub.py` if you're not in
+`America/Sao_Paulo`.
 
 ---
 
@@ -203,8 +280,12 @@ parallel-rdp core, PS2 BIOS/memory card, and cover fetching. See
 ## Security
 
 Be honest with yourself about what this is: a web server that **launches and kills
-processes on the host** (emulators, mpv) on request. Treat it accordingly.
+processes on the host** (emulators, mpv, apps, the kiosk browser) on request.
+Treat it accordingly.
 
+- **`/home` (the TV's Home Screen) skips the login entirely**, on purpose — it's
+  meant for a physically-present TV, not a device someone reaches over the
+  network. `OIKOS_PASSWORD`/`OIKOS_TOKEN` only gate the phone's `/`.
 - **Trust boundary is the network.** Run it on your LAN, and reach it from outside
   over Tailscale (or another VPN). **Never** port-forward `:8100` to the internet or
   put it behind a public reverse proxy. There is no sandbox around what it can start.
@@ -225,8 +306,11 @@ processes on the host** (emulators, mpv) on request. Treat it accordingly.
 - Game covers come from [libretro-thumbnails](https://github.com/libretro-thumbnails)
   via [`emulators/fetch-covers.py`](emulators/fetch-covers.py); drop a `<rom-name>.png`
   into the covers folder if a title does not match.
-- Music has no search on purpose — public indexers rarely carry music and Lidarr's
-  metadata is poor. Fill `/media/music` yourself.
+- Browsing the Music tab itself has no search box on purpose — public indexers
+  rarely carry music, Lidarr's browse metadata is patchy, and album covers are
+  hit or miss. Fill `/media/music` yourself and let Navidrome pick it up. The
+  unified Busca tab does search Lidarr (for requesting new artists), it's just
+  not wired into the Music tab's own browsing.
 - Legality is on you: use your own game dumps and legally obtained media.
 
 ## License
