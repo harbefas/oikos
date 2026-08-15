@@ -35,6 +35,12 @@ HYPRPAD = os.environ.get("OIKOS_HYPRPAD", "").strip().rstrip("/")
 if HYPRPAD and os.environ.get("OIKOS_HYPRPAD_TOKEN", "").strip():
     HYPRPAD += "?t=" + urllib.parse.quote(os.environ["OIKOS_HYPRPAD_TOKEN"].strip())
 PWHASH = hashlib.sha256(PASSWORD.encode()).hexdigest() if PASSWORD else ""
+# Built UI (Svelte -> static files). Ships as `dist/` next to this script in a
+# release tarball; in a git checkout it is hub/ui/dist after `pnpm build`.
+STATIC = os.environ.get("OIKOS_STATIC") or next(
+    (p for p in (os.path.join(os.path.dirname(os.path.abspath(__file__)), "dist"),
+                 os.path.join(os.path.dirname(os.path.abspath(__file__)), "ui", "dist"))
+     if os.path.isdir(p)), "")
 STATE = {"cover": None, "mkind": None, "query": ""}   # cover/mkind: /api/play; query: teclado do celular -> busca na TV
 
 
@@ -264,6 +270,7 @@ APPS = [
     {"id": "kodi",     "label": "Kodi",     "icon": "📺", "cmd": "kodi"},
     {"id": "jellyfin",  "label": "Filmes", "icon": "🎬",
      "cmd": "librewolf --kiosk http://localhost:8096"},
+    {"id": "librewolf", "label": "LibreWolf", "icon": "🌐", "cmd": "librewolf"},
     {"id": "navidrome", "label": "Música", "icon": "🎵",
      "cmd": "librewolf --kiosk http://localhost:4533"},
     {"id": "spotify",  "label": "Spotify", "icon": "🎧", "cmd": "run-spotify"},
@@ -413,12 +420,23 @@ def _steam_libs():
     return libs
 
 
-def _steam_cover(appid):
+def _steam_art(appid, filename):
     for base in (STEAM_ROOT, os.path.join(_STEAM_HOME, ".steam/steam")):
-        p = os.path.join(base, "appcache", "librarycache", appid, "library_600x900.jpg")
+        p = os.path.join(base, "appcache", "librarycache", appid, filename)
         if os.path.exists(p):
             return p
     return None
+
+
+def _steam_cover(appid):
+    return _steam_art(appid, "library_600x900.jpg")
+
+
+def _steam_hero(appid):
+    """Wide key art Steam already caches on disk. This is what feeds the TV's
+    ambient backdrop for Steam titles -- no API, no key, no network. ROM titles
+    have no equivalent, so they fall back to their poster."""
+    return _steam_art(appid, "library_hero.jpg")
 
 
 def list_steam():
@@ -443,7 +461,8 @@ def list_steam():
             seen.add(appid)
             games.append({"system": "steam", "label": "PC", "name": name or appid,
                           "path": appid,
-                          "cover": f"/steamcover/{appid}" if _steam_cover(appid) else None})
+                          "cover": f"/steamcover/{appid}" if _steam_cover(appid) else None,
+                          "hero": f"/steamhero/{appid}" if _steam_hero(appid) else None})
     games.sort(key=lambda g: g["name"].lower())
     return games
 
@@ -454,6 +473,12 @@ def running_game():
     for pat, name in (("mpv", "mpv"), ("pcsx2", "pcsx2-qt"), ("retroarch", "retroarch")):
         if subprocess.run(["pgrep", pat], capture_output=True).returncode == 0:
             return name
+    # Fallback: usa a janela focada no compositor (Sway/Hyprland).
+    # Cobre Steam e qualquer outro launcher sem precisar listar processos por nome.
+    # O kiosk da TV (librewolf) e foco vazio nao contam como jogo.
+    app = focused_app()
+    if app and "librewolf" not in app:
+        return app
     return None
 
 
@@ -494,8 +519,11 @@ def jf_get(path):
 
 def list_movies():
     d = jf_get("/Items?IncludeItemTypes=Movie&Recursive=true&SortBy=SortName&Fields=Path")
+    # backdrop is the wide art the TV's ambient layer crossfades between; the
+    # poster is the fallback when an item has none (28 of 29 do have one).
     return [{"name": m["Name"], "path": m.get("Path"), "id": m["Id"],
-             "cover": f"/jf/{m['Id']}" if "Primary" in m.get("ImageTags", {}) else None}
+             "cover": f"/jf/{m['Id']}" if "Primary" in m.get("ImageTags", {}) else None,
+             "backdrop": f"/jfbd/{m['Id']}" if m.get("BackdropImageTags") else None}
             for m in d["Items"] if m.get("Path")]
 
 
@@ -523,7 +551,8 @@ def detail(iid):
 def list_series():
     d = jf_get("/Items?IncludeItemTypes=Series&Recursive=true&SortBy=SortName")
     return [{"name": s["Name"], "id": s["Id"],
-             "cover": f"/jf/{s['Id']}" if "Primary" in s.get("ImageTags", {}) else None}
+             "cover": f"/jf/{s['Id']}" if "Primary" in s.get("ImageTags", {}) else None,
+             "backdrop": f"/jfbd/{s['Id']}" if s.get("BackdropImageTags") else None}
             for s in d["Items"]]
 
 
@@ -1042,6 +1071,9 @@ body[data-mode=home] #remote{display:flex}
 .mc-corner{position:absolute!important;top:clamp(10px,3vmin,22px);left:4vw;
   width:clamp(40px,9vmin,60px);height:clamp(40px,9vmin,60px);
   border-radius:50%;font-size:clamp(18px,4vmin,26px);background:#2b303c!important;opacity:.8}
+.mc-close{position:absolute!important;top:clamp(10px,3vmin,22px);right:4vw;
+  width:clamp(40px,9vmin,60px);height:clamp(40px,9vmin,60px);
+  border-radius:50%;font-size:clamp(18px,4vmin,26px);background:#2b303c!important;opacity:.8}
 /* imagem completa (contain): filme (2:3) e capa de album (1:1) aparecem inteiros.
    altura fixa responsiva, largura acompanha a proporcao real */
 #mc-art{height:clamp(130px,30vh,340px);width:auto;max-width:86vw;object-fit:contain;
@@ -1244,6 +1276,7 @@ body[data-p="2"] #pnum{color:var(--p2)}
 
   <div id=mediactl>
     <button id=mc-back class=mc-corner onclick="showTab('games')">☰</button>
+    <button id=mc-close class=mc-close onclick="stop()" title="fechar mídia">✕</button>
     <img id=mc-art alt="">
     <div id=mc-title>—</div>
     <div id=mc-time><span id=mc-cur>0:00</span><div id=mc-bar><div id=mc-fill></div></div><span id=mc-dur>0:00</span></div>
@@ -1259,6 +1292,7 @@ body[data-p="2"] #pnum{color:var(--p2)}
       <button data-mpv=audio>🔊 áudio</button>
       <button data-mpv=sub>💬 legenda</button>
       <button data-mpv=volup>🔊</button>
+      <button onclick="stop()">✕ Fechar</button>
     </div>
     <div id=mc-sync class=mc-vid>
       <div class=mc-syncrow>
@@ -2504,6 +2538,40 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
+    _TYPES = {".html": "text/html; charset=utf-8", ".js": "text/javascript",
+              ".css": "text/css", ".json": "application/json", ".svg": "image/svg+xml",
+              ".png": "image/png", ".jpg": "image/jpeg", ".webp": "image/webp",
+              ".woff2": "font/woff2", ".ico": "image/x-icon"}
+
+    def _static(self, rel, extra=()):
+        """Serve a file from the built UI. Returns False if there is nothing to
+        serve, so callers can fall through to a 404. `extra` is a list of
+        (header, value) pairs written alongside the response."""
+        if not STATIC:
+            return False
+        # Resolve and confirm the result is still inside STATIC: without this a
+        # request for /assets/../../etc/passwd would escape the directory.
+        full = os.path.realpath(os.path.join(STATIC, rel.lstrip("/")))
+        root = os.path.realpath(STATIC)
+        if not (full == root or full.startswith(root + os.sep)) or not os.path.isfile(full):
+            return False
+
+        data = open(full, "rb").read()
+        ext = os.path.splitext(full)[1].lower()
+        self.send_response(200)
+        self.send_header("Content-Type", self._TYPES.get(ext, "application/octet-stream"))
+        # Vite fingerprints everything under /assets, so those are immutable.
+        # The HTML entry points must never be cached or the TV pins an old build.
+        self.send_header("Cache-Control",
+                         "max-age=31536000, immutable" if "/assets/" in full.replace(os.sep, "/")
+                         else "no-store")
+        for k, v in extra:
+            self.send_header(k, v)
+        self.send_header("Content-Length", str(len(data)))
+        self.end_headers()
+        self.wfile.write(data)
+        return True
+
     def _authed(self):
         # Neither set -> open (trusted LAN). Otherwise accept ?t=<token>, or the
         # `oikos` cookie holding the token or the password hash. Cookies auto-attach
@@ -2558,7 +2626,8 @@ class Handler(BaseHTTPRequestHandler):
             self.send_header("Cache-Control", "no-store")
             self.send_header("Content-Length", str(len(body)))
             self.end_headers()
-            return self.wfile.write(body)
+            self.wfile.write(body)
+            return
         if not self._authed():
             # login form only at the root; everything else gets a clean 401
             if PASSWORD and (path == "/" or path == ""):
@@ -2566,12 +2635,14 @@ class Handler(BaseHTTPRequestHandler):
             return self._deny()
         if path == "/" or path == "":
             body = PAGE.encode()
+            extra = ([("Set-Cookie",
+                       f"oikos={TOKEN}; Path=/; Max-Age=31536000; SameSite=Lax")]
+                     if TOKEN else [])
             self.send_response(200)
+            for k, v in extra:
+                self.send_header(k, v)
             self.send_header("Content-Type", "text/html; charset=utf-8")
             self.send_header("Cache-Control", "no-store")
-            if TOKEN:   # persist the token so later requests carry it
-                self.send_header("Set-Cookie",
-                                 f"oikos={TOKEN}; Path=/; Max-Age=31536000; SameSite=Lax")
             self.send_header("Content-Length", str(len(body)))
             self.end_headers()
             self.wfile.write(body)
@@ -2769,8 +2840,10 @@ class Handler(BaseHTTPRequestHandler):
                 self.wfile.write(data)
             else:
                 self.send_response(404); self.end_headers()
-        elif path.startswith("/steamcover/"):
-            p = _steam_cover(path[len("/steamcover/"):])
+        elif path.startswith("/steamcover/") or path.startswith("/steamhero/"):
+            hero = path.startswith("/steamhero/")
+            appid = path[len("/steamhero/" if hero else "/steamcover/"):]
+            p = _steam_hero(appid) if hero else _steam_cover(appid)
             if p:
                 data = open(p, "rb").read()
                 self.send_response(200)

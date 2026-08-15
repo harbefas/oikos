@@ -1,0 +1,56 @@
+name: ui
+
+# The hub serves a built Svelte app. Building it here keeps node_modules off
+# the homelab and build artifacts out of the git history: the box downloads a
+# tarball instead. See hub/ui/README.md.
+on:
+  push:
+    tags: ['ui-v*']
+    branches: [master]
+    paths: ['hub/ui/**', '.github/workflows/ui.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: hub/ui
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: hub/ui/pnpm-lock.yaml
+
+      - run: pnpm install --frozen-lockfile
+
+      - run: pnpm build
+
+      # Fail loudly rather than shipping an empty tarball: a build that emits
+      # no entry points still exits 0 if the config is wrong.
+      - name: Check output
+        run: test -f dist/index.html && test -f dist/tv.html
+
+      - run: tar -czf oikos-ui.tar.gz -C dist .
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: oikos-ui
+          path: hub/ui/oikos-ui.tar.gz
+
+      - name: Publish release
+        if: startsWith(github.ref, 'refs/tags/ui-v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: hub/ui/oikos-ui.tar.gz

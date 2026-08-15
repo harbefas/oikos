@@ -3,7 +3,13 @@
 # e a propria Home Screen (librewolf --kiosk) -- so uma coisa em primeiro plano
 # por vez. Chamado antes de QUALQUER lancamento (/api/launch, /api/play, /api/app)
 # e pelo botao de fechar (/api/stop).
-PROCS="pcsx2-qt retroarch mpv librewolf kodi spotify spotify-launcher"
+PROCS="pcsx2-qt retroarch mpv librewolf kodi spotify"
+PROCS_LONG="spotify-launcher"
+
 for p in $PROCS; do pkill -x $p 2>/dev/null; done
+for p in $PROCS_LONG; do pkill -f "^(.*\/)?$p( |$)" 2>/dev/null; done
+
 sleep 2
+
 for p in $PROCS; do pgrep -x $p >/dev/null && pkill -9 -x $p; done
+for p in $PROCS_LONG; do pgrep -f "^(.*\/)?$p( |$)" >/dev/null && pkill -9 -f "^(.*\/)?$p( |$)"; done

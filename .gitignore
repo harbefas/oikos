@@ -1,3 +1,8 @@
 __pycache__/
 *.pyc
 *.log
+
+# built UI (CI produces the release tarball)
+hub/ui/dist/
+hub/ui/node_modules/
+hub/ui/oikos-ui.tar.gz

@@ -1,0 +1,5 @@
+# esbuild ships a platform binary that its postinstall unpacks; without this
+# pnpm skips the script and vite cannot start. Declared here rather than
+# approved interactively so CI installs identically.
+allowBuilds:
+  esbuild: true

@@ -79,8 +79,8 @@ plus [`python-evdev`](https://pypi.org/project/evdev/). No app, no HTTPS require
   L1/L2/R1/R2, turbo, a d-pad/analog swap). Two players via `?p=2`. Locks to landscape.
 - **Movies / Series / Music** — posters pulled from Jellyfin as a catalog, played with
   **mpv** on the TV (not Jellyfin's own player).
-- **Apps** — a grid of one-tap launchers for anything else on the box: Jellyfin's own
-  web UI, Navidrome, Kodi, Spotify (native client) — whatever you add to the `APPS`
+- **Apps** — a grid of one-tap launchers for anything else on the box: LibreWolf,
+  Jellyfin's own web UI, Navidrome, Kodi, Spotify (native client) — whatever you add to the `APPS`
   list. Launching one closes the Home Screen kiosk first (see below), so it always
   gets the full screen.
 - **Busca** — search across Radarr (movies), Sonarr (series) **and Lidarr (music)**
