@@ -42,6 +42,7 @@ STATIC = os.environ.get("OIKOS_STATIC") or next(
                  os.path.join(os.path.dirname(os.path.abspath(__file__)), "ui", "dist"))
      if os.path.isdir(p)), "")
 STATE = {"cover": None, "mkind": None, "query": ""}   # cover/mkind: /api/play; query: teclado do celular -> busca na TV
+PAD_WS_CLIENTS = 0
 
 
 def hyprpad_up():
@@ -2581,6 +2582,8 @@ watchSearchQuery();
 
 
 class Handler(BaseHTTPRequestHandler):
+    protocol_version = "HTTP/1.1"
+
     def log_message(self, *a):
         pass
 
@@ -2692,6 +2695,7 @@ class Handler(BaseHTTPRequestHandler):
         self.connection.sendall(bytes([0x80 | opcode, len(data)]) + data)
 
     def _pad_ws(self):
+        global PAD_WS_CLIENTS
         key = self.headers.get("Sec-WebSocket-Key", "")
         if not key:
             self.send_response(400); self.end_headers(); return
@@ -2704,19 +2708,23 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("Sec-WebSocket-Accept", accept)
         self.end_headers()
         self.connection.settimeout(30)
-        while True:
-            opcode, data = self._read_ws_frame()
-            if opcode is None or opcode == 8:
-                break
-            if opcode == 9:
-                self._send_ws_frame(10, data[:125])
-                continue
-            if opcode != 1:
-                continue
-            try:
-                handle_pad_event(json.loads(data.decode("utf-8")))
-            except Exception:
-                pass
+        PAD_WS_CLIENTS += 1
+        try:
+            while True:
+                opcode, data = self._read_ws_frame()
+                if opcode is None or opcode == 8:
+                    break
+                if opcode == 9:
+                    self._send_ws_frame(10, data[:125])
+                    continue
+                if opcode != 1:
+                    continue
+                try:
+                    handle_pad_event(json.loads(data.decode("utf-8")))
+                except Exception:
+                    pass
+        finally:
+            PAD_WS_CLIENTS = max(0, PAD_WS_CLIENTS - 1)
 
     def do_GET(self):
         path = urlparse(self.path).path
@@ -2910,11 +2918,11 @@ class Handler(BaseHTTPRequestHandler):
                 now = mpv_now_playing() or {}
                 now["cover"] = STATE["cover"]
                 now["mkind"] = STATE["mkind"]
-                self._json({"running": True, "kind": "media", "now": now})
+                self._json({"running": True, "kind": "media", "now": now, "padws": PAD_WS_CLIENTS})
             elif g:
-                self._json({"running": True, "kind": "game", "current": g})
+                self._json({"running": True, "kind": "game", "current": g, "padws": PAD_WS_CLIENTS})
             else:
-                self._json({"running": False, "kind": "home"})
+                self._json({"running": False, "kind": "home", "padws": PAD_WS_CLIENTS})
         elif path == "/api/idle":
             # usado so pela Home Screen: "idle" = nada em foco alem do proprio kiosk
             # (filme, jogo, Steam, Spotify... qualquer janela por cima conta como "nao idle")
