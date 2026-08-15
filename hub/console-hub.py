@@ -281,7 +281,7 @@ APPS = [
 
 # --- gamepads (identicos ao padserver de 2 jogadores) ---
 BUTTONS = {
-    "a": e.BTN_SOUTH, "b": e.BTN_EAST, "x": e.BTN_WEST, "y": e.BTN_NORTH,
+    "a": e.BTN_SOUTH, "b": e.BTN_EAST, "x": e.BTN_NORTH, "y": e.BTN_WEST,
     "l": e.BTN_TL, "r": e.BTN_TR, "z": e.BTN_TL2, "r2": e.BTN_TR2,
     "select": e.BTN_SELECT, "start": e.BTN_START, "l3": e.BTN_THUMBL,
     "r3": e.BTN_THUMBR, "up": e.BTN_DPAD_UP, "down": e.BTN_DPAD_DOWN,
@@ -1098,8 +1098,8 @@ body[data-dswap] #ls{width:30vh;height:30vh;max-width:210px;max-height:210px}
 /* 2o analogico: centro-direita, diagonal a partir dos botoes */
 #rs{right:28vw;bottom:48vh;width:27vh;height:27vh;max-width:195px;max-height:195px}
 /* botoes de acao: canto inferior direito (polegar dir) */
-#face{right:4vw;bottom:6vh;display:grid;grid-template-columns:repeat(3,13vh);grid-template-rows:repeat(3,13vh);gap:1.1vh}
-#face button{border-radius:50%;font-size:4vh;background:#333a47;box-shadow:inset 0 -5px 0 #0003,0 5px 16px #0006}
+#face{right:3vw;bottom:5vh;display:grid;grid-template-columns:repeat(3,14.5vh);grid-template-rows:repeat(3,14.5vh);gap:.8vh}
+#face button{border-radius:50%;font-size:4.6vh;background:#333a47;box-shadow:inset 0 -5px 0 #0003,0 5px 16px #0006}
 #face .face-guide{align-self:center;justify-self:center;width:7vh;height:7vh;border-radius:50%;
   display:grid;place-items:center;background:#202631;border:1px solid #ffffff12;color:#ffffff80;
   font-size:1.6vh;font-weight:800;letter-spacing:.06em;box-shadow:inset 0 1px 0 #ffffff12}
@@ -1125,7 +1125,7 @@ body[data-mode=media] #swapd{display:none}
 .lbl{position:absolute;bottom:.8vh;left:50%;transform:translateX(-50%);font-size:1.3vh;font-weight:800;opacity:.35;letter-spacing:.04em}
 body[data-p="2"] #pnum{color:#e8552d}
 @media (max-height:430px){
-  #face{grid-template-columns:repeat(3,12vh);grid-template-rows:repeat(3,12vh)}
+  #face{grid-template-columns:repeat(3,13vh);grid-template-rows:repeat(3,13vh);gap:.7vh}
   body:not([data-dswap]) #dpad, body[data-dswap] #ls{bottom:45vh}
   #rs{bottom:45vh}
   .trig{height:8vh}.trig.trigger{height:9.5vh}
