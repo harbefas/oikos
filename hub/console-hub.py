@@ -8,7 +8,7 @@ Estende o padserver. Alem de servir os gamepads virtuais (uinput), oferece:
 
 Lanca via `swaymsg exec` na sessao Sway. Sem app no celular.
 """
-import hashlib, json, os, re, socket, struct, subprocess, urllib.parse, urllib.request, zlib
+import base64, hashlib, json, os, re, socket, struct, subprocess, urllib.parse, urllib.request, zlib
 from datetime import datetime
 from urllib.parse import urlparse, parse_qs
 
@@ -316,6 +316,21 @@ def _mkkbd():
 KBD = _mkkbd()
 REMOTE_KEYS = {"up": e.KEY_UP, "down": e.KEY_DOWN, "left": e.KEY_LEFT, "right": e.KEY_RIGHT,
                "ok": e.KEY_ENTER, "back": e.KEY_ESC}
+
+
+def handle_pad_event(d):
+    ui = PADS.get(2 if d.get("p") == 2 else 1)
+    if not ui:
+        raise RuntimeError("uinput gamepad unavailable")
+    ax = d.get("axis")
+    if ax:
+        c = lambda v: max(-AMAX, min(AMAX, int(v)))
+        xa, ya = (e.ABS_X, e.ABS_Y) if ax == 1 else (e.ABS_RX, e.ABS_RY)
+        ui.write(e.EV_ABS, xa, c(d.get("x", 0)))
+        ui.write(e.EV_ABS, ya, c(d.get("y", 0)))
+    else:
+        ui.write(e.EV_KEY, BUTTONS[d["btn"]], 1 if d["state"] else 0)
+    ui.syn()
 
 
 # --- helpers de lancamento ---
@@ -1814,7 +1829,22 @@ function openTv(){ document.getElementById('tvview').classList.add('on'); tvTick
 function closeTv(){ document.getElementById('tvview').classList.remove('on'); clearInterval(tvTimer); tvTimer=null; }
 
 // ---------- gamepad (controle) ----------
-const post=o=>{o.p=P;return fetch('/p',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(o),keepalive:true}).catch(()=>{});};
+let padWs=null,padWsOk=false;
+function padWsUrl(){return (location.protocol==='https:'?'wss://':'ws://')+location.host+'/pad.ws'+location.search;}
+function connectPadWs(){
+  if(padWs&&(padWs.readyState===WebSocket.OPEN||padWs.readyState===WebSocket.CONNECTING))return;
+  try{
+    padWs=new WebSocket(padWsUrl());
+    padWs.onopen=()=>{padWsOk=true;};
+    padWs.onclose=()=>{padWsOk=false;setTimeout(connectPadWs,800);};
+    padWs.onerror=()=>{padWsOk=false;try{padWs.close();}catch(_){}};
+  }catch(_){padWsOk=false;}
+}
+connectPadWs();
+const post=o=>{o.p=P;const body=JSON.stringify(o);
+  if(padWsOk&&padWs&&padWs.readyState===WebSocket.OPEN){try{padWs.send(body);return;}catch(_){}}
+  return fetch('/p',{method:'POST',headers:{'Content-Type':'application/json'},body,keepalive:true}).catch(()=>{});
+};
 const buzz=(ms=12)=>{try{navigator.vibrate&&navigator.vibrate(ms)}catch(_){}};
 
 // controle remoto: navega a Home Screen da TV (teclado uinput no hub)
@@ -2616,8 +2646,60 @@ class Handler(BaseHTTPRequestHandler):
         else:
             self._login_page("Wrong password")
 
+    def _read_ws_frame(self):
+        head = self.rfile.read(2)
+        if len(head) < 2:
+            return None, b""
+        b1, b2 = head
+        opcode = b1 & 0x0f
+        masked = b2 & 0x80
+        size = b2 & 0x7f
+        if size == 126:
+            size = struct.unpack("!H", self.rfile.read(2))[0]
+        elif size == 127:
+            size = struct.unpack("!Q", self.rfile.read(8))[0]
+        mask = self.rfile.read(4) if masked else b""
+        data = self.rfile.read(size) if size else b""
+        if masked:
+            data = bytes(b ^ mask[i % 4] for i, b in enumerate(data))
+        return opcode, data
+
+    def _send_ws_frame(self, opcode, data=b""):
+        self.connection.sendall(bytes([0x80 | opcode, len(data)]) + data)
+
+    def _pad_ws(self):
+        key = self.headers.get("Sec-WebSocket-Key", "")
+        if not key:
+            self.send_response(400); self.end_headers(); return
+        accept = base64.b64encode(hashlib.sha1(
+            (key + "258EAFA5-E914-47DA-95CA-C5AB0DC85B11").encode()
+        ).digest()).decode()
+        self.send_response(101)
+        self.send_header("Upgrade", "websocket")
+        self.send_header("Connection", "Upgrade")
+        self.send_header("Sec-WebSocket-Accept", accept)
+        self.end_headers()
+        self.connection.settimeout(30)
+        while True:
+            opcode, data = self._read_ws_frame()
+            if opcode is None or opcode == 8:
+                break
+            if opcode == 9:
+                self._send_ws_frame(10, data[:125])
+                continue
+            if opcode != 1:
+                continue
+            try:
+                handle_pad_event(json.loads(data.decode("utf-8")))
+            except Exception:
+                pass
+
     def do_GET(self):
         path = urlparse(self.path).path
+        if path == "/pad.ws":
+            if not self._authed():
+                return self._deny()
+            return self._pad_ws()
         if path == "/home":
             # tela da TV (kiosk local) -- nao passa pelo login do celular
             body = HOME_PAGE.encode()
@@ -2872,16 +2954,7 @@ class Handler(BaseHTTPRequestHandler):
 
         if path == "/p":
             try:
-                ui = PADS.get(2 if d.get("p") == 2 else 1)
-                ax = d.get("axis")
-                if ax:
-                    c = lambda v: max(-AMAX, min(AMAX, int(v)))
-                    xa, ya = (e.ABS_X, e.ABS_Y) if ax == 1 else (e.ABS_RX, e.ABS_RY)
-                    ui.write(e.EV_ABS, xa, c(d.get("x", 0)))
-                    ui.write(e.EV_ABS, ya, c(d.get("y", 0)))
-                else:
-                    ui.write(e.EV_KEY, BUTTONS[d["btn"]], 1 if d["state"] else 0)
-                ui.syn()
+                handle_pad_event(d)
                 self.send_response(204); self.end_headers()
             except Exception:
                 self.send_response(400); self.end_headers()
