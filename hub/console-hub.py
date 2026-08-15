@@ -8,7 +8,7 @@ Estende o padserver. Alem de servir os gamepads virtuais (uinput), oferece:
 
 Lanca via `swaymsg exec` na sessao Sway. Sem app no celular.
 """
-import base64, hashlib, json, os, re, socket, struct, subprocess, urllib.parse, urllib.request, zlib
+import base64, hashlib, json, os, re, socket, struct, subprocess, time, urllib.parse, urllib.request, zlib
 from datetime import datetime
 from urllib.parse import urlparse, parse_qs
 
@@ -43,6 +43,8 @@ STATIC = os.environ.get("OIKOS_STATIC") or next(
      if os.path.isdir(p)), "")
 STATE = {"cover": None, "mkind": None, "query": ""}   # cover/mkind: /api/play; query: teclado do celular -> busca na TV
 PAD_WS_CLIENTS = 0
+PAD_WS_BY_PLAYER = {1: 0, 2: 0}
+PAD_IDLE_SECS = 45
 
 
 def hyprpad_up():
@@ -303,7 +305,35 @@ def _mkpad(player):
         return None
 
 
-PADS = {1: _mkpad(1), 2: _mkpad(2)}
+PADS = {1: _mkpad(1), 2: None}
+PAD_LAST = {1: time.time(), 2: 0}
+
+
+def ensure_pad(player):
+    if PADS.get(player) is None:
+        PADS[player] = _mkpad(player)
+        if PADS[player]:
+            print(f"gamepad P{player}: {PADS[player].device.path}")
+    PAD_LAST[player] = time.time()
+    return PADS.get(player)
+
+
+def close_pad(player):
+    pad = PADS.get(player)
+    if not pad:
+        return
+    try:
+        pad.close()
+    except Exception:
+        pass
+    PADS[player] = None
+    print(f"gamepad P{player}: off")
+
+
+def reap_idle_pads():
+    now = time.time()
+    if PADS.get(2) and PAD_WS_BY_PLAYER.get(2, 0) <= 0 and now - PAD_LAST.get(2, 0) > PAD_IDLE_SECS:
+        close_pad(2)
 
 
 def _mkkbd():
@@ -323,7 +353,8 @@ REMOTE_KEYS = {"up": e.KEY_UP, "down": e.KEY_DOWN, "left": e.KEY_LEFT, "right": 
 
 
 def handle_pad_event(d):
-    ui = PADS.get(2 if d.get("p") == 2 else 1)
+    p = 2 if d.get("p") == 2 else 1
+    ui = ensure_pad(p)
     if not ui:
         raise RuntimeError("uinput gamepad unavailable")
     ax = d.get("axis")
@@ -1235,6 +1266,9 @@ html,body{background:var(--bg)!important;background-image:none!important;color:v
 .poster .req{background:var(--accent-2)!important;color:#fff!important}
 #np-bg{filter:blur(38px) brightness(.5) saturate(1.15)}
 body[data-p="2"] #pnum{color:var(--p2)}
+body[data-profile=retro] #face .face-guide{color:var(--accent)}
+body[data-profile=playstation] #face .face-guide{color:#3478d4}
+body[data-profile=nintendo] #face .face-guide{color:#c94747}
 /* gamepad */
 #pad{background:var(--bg)!important}
 #pad button{background:var(--ui)!important;color:var(--tx)!important}
@@ -1813,10 +1847,25 @@ async function loadApps(){
 }
 
 // ---------- status / mini-player ----------
+function applyPadProfile(s){
+  const cur=(s.current||'').toLowerCase();
+  let profile='xbox', label='XB', right='RS';
+  if(cur.includes('retroarch')){ profile='retro'; label='RET'; right='C'; }
+  else if(cur.includes('pcsx2')){ profile='playstation'; label='PS'; }
+  else if(cur.includes('dolphin')){ profile='nintendo'; label='GC'; right='C'; }
+  document.body.dataset.profile=profile;
+  const guide=document.querySelector('#face .face-guide');
+  if(guide) guide.textContent=label;
+  const rsl=document.querySelector('#rs .lbl');
+  if(rsl) rsl.textContent=right;
+  const pn=document.getElementById('pnum');
+  if(pn) pn.textContent='P'+P;
+}
 async function refreshStatus(){
   const s = await fetch('/api/status').then(r=>r.json()).catch(()=>({running:false}));
   const mp=document.getElementById('miniplayer');
   document.body.dataset.mode = s.kind==='media' ? 'media' : (s.kind==='home' ? 'home' : 'game');
+  applyPadProfile(s);
   if(document.body.dataset.inpad==='1'){
     if(document.body.dataset.mode==='game') lockLandscape(); else unlockOrient();
     if(document.body.dataset.mode!=='home') hideTabs();
@@ -1837,9 +1886,6 @@ async function refreshStatus(){
     document.getElementById('mp-title').textContent = 'Jogo rodando';
     document.getElementById('mp-sub').textContent = 'toque para abrir o controle';
     art.style.display='none'; pp.style.display='none';
-    // rotulo do analogico direito: 'C' no N64 (retroarch), 'R' no PS2 (pcsx2)
-    const rsl=document.querySelector('#rs .lbl');
-    if(rsl) rsl.textContent = (s.current||'').includes('retro') ? 'C' : 'R';
   }
 }
 async function mpvBtn(action){
@@ -2693,19 +2739,25 @@ class Handler(BaseHTTPRequestHandler):
             self._login_page("Wrong password")
 
     def _read_ws_frame(self):
-        head = self.rfile.read(2)
+        try:
+            head = self.rfile.read(2)
+        except OSError:
+            return None, b""
         if len(head) < 2:
             return None, b""
         b1, b2 = head
         opcode = b1 & 0x0f
         masked = b2 & 0x80
         size = b2 & 0x7f
-        if size == 126:
-            size = struct.unpack("!H", self.rfile.read(2))[0]
-        elif size == 127:
-            size = struct.unpack("!Q", self.rfile.read(8))[0]
-        mask = self.rfile.read(4) if masked else b""
-        data = self.rfile.read(size) if size else b""
+        try:
+            if size == 126:
+                size = struct.unpack("!H", self.rfile.read(2))[0]
+            elif size == 127:
+                size = struct.unpack("!Q", self.rfile.read(8))[0]
+            mask = self.rfile.read(4) if masked else b""
+            data = self.rfile.read(size) if size else b""
+        except OSError:
+            return None, b""
         if masked:
             data = bytes(b ^ mask[i % 4] for i, b in enumerate(data))
         return opcode, data
@@ -2718,6 +2770,7 @@ class Handler(BaseHTTPRequestHandler):
         key = self.headers.get("Sec-WebSocket-Key", "")
         if not key:
             self.send_response(400); self.end_headers(); return
+        player = 2 if parse_qs(urlparse(self.path).query).get("p") == ["2"] else 1
         accept = base64.b64encode(hashlib.sha1(
             (key + "258EAFA5-E914-47DA-95CA-C5AB0DC85B11").encode()
         ).digest()).decode()
@@ -2728,6 +2781,8 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.connection.settimeout(30)
         PAD_WS_CLIENTS += 1
+        PAD_WS_BY_PLAYER[player] = PAD_WS_BY_PLAYER.get(player, 0) + 1
+        ensure_pad(player)
         try:
             while True:
                 opcode, data = self._read_ws_frame()
@@ -2744,6 +2799,8 @@ class Handler(BaseHTTPRequestHandler):
                     pass
         finally:
             PAD_WS_CLIENTS = max(0, PAD_WS_CLIENTS - 1)
+            PAD_WS_BY_PLAYER[player] = max(0, PAD_WS_BY_PLAYER.get(player, 0) - 1)
+            reap_idle_pads()
 
     def do_GET(self):
         path = urlparse(self.path).path
@@ -2931,17 +2988,19 @@ class Handler(BaseHTTPRequestHandler):
             except Exception:
                 self.send_response(404); self.end_headers()
         elif path == "/api/status":
+            reap_idle_pads()
             g = running_game()
+            pads = [n for n, pad in PADS.items() if pad]
             # kind: 'game' (gamepad) | 'media' (controle de video) | 'home' (kiosk da TV, nada rodando)
             if g == "mpv":
                 now = mpv_now_playing() or {}
                 now["cover"] = STATE["cover"]
                 now["mkind"] = STATE["mkind"]
-                self._json({"running": True, "kind": "media", "now": now, "padws": PAD_WS_CLIENTS})
+                self._json({"running": True, "kind": "media", "now": now, "padws": PAD_WS_CLIENTS, "pads": pads})
             elif g:
-                self._json({"running": True, "kind": "game", "current": g, "padws": PAD_WS_CLIENTS})
+                self._json({"running": True, "kind": "game", "current": g, "padws": PAD_WS_CLIENTS, "pads": pads})
             else:
-                self._json({"running": False, "kind": "home", "padws": PAD_WS_CLIENTS})
+                self._json({"running": False, "kind": "home", "padws": PAD_WS_CLIENTS, "pads": pads})
         elif path == "/api/idle":
             # usado so pela Home Screen: "idle" = nada em foco alem do proprio kiosk
             # (filme, jogo, Steam, Spotify... qualquer janela por cima conta como "nao idle")
@@ -3111,6 +3170,7 @@ class Handler(BaseHTTPRequestHandler):
 
 
 for n, pad in PADS.items():
-    print(f"gamepad P{n}: {pad.device.path}")
+    if pad:
+        print(f"gamepad P{n}: {pad.device.path}")
 print(f"console hub:  http://0.0.0.0:{PORT}")
 ThreadingHTTPServer(("0.0.0.0", PORT), Handler).serve_forever()
