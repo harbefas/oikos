@@ -3,13 +3,18 @@
 # e a propria Home Screen (librewolf --kiosk) -- so uma coisa em primeiro plano
 # por vez. Chamado antes de QUALQUER lancamento (/api/launch, /api/play, /api/app)
 # e pelo botao de fechar (/api/stop).
-PROCS="pcsx2-qt retroarch mpv librewolf kodi spotify"
+PROCS="pcsx2-qt retroarch mpv librewolf kodi spotify gameoverlayui"
 PROCS_LONG="spotify-launcher"
+STEAM_GAME_PAT='SteamLaunch AppId=|proton waitforexitandrun|steamapps/common/.+|wineserver|winedevice\.exe|explorer\.exe|plugplay\.exe|rpcss\.exe|services\.exe|steam\.exe|\.exe -steam|fossilize_replay'
 
 for p in $PROCS; do pkill -x $p 2>/dev/null; done
 for p in $PROCS_LONG; do pkill -f "^(.*\/)?$p( |$)" 2>/dev/null; done
+pkill -f "$STEAM_GAME_PAT" 2>/dev/null
 
 sleep 2
 
 for p in $PROCS; do pgrep -x $p >/dev/null && pkill -9 -x $p; done
 for p in $PROCS_LONG; do pgrep -f "^(.*\/)?$p( |$)" >/dev/null && pkill -9 -f "^(.*\/)?$p( |$)"; done
+pgrep -f "$STEAM_GAME_PAT" >/dev/null && pkill -9 -f "$STEAM_GAME_PAT"
+
+exit 0

@@ -488,11 +488,14 @@ def running_game():
     for pat, name in (("mpv", "mpv"), ("pcsx2", "pcsx2-qt"), ("retroarch", "retroarch")):
         if subprocess.run(["pgrep", pat], capture_output=True).returncode == 0:
             return name
+    steam_game = r"SteamLaunch AppId=|proton waitforexitandrun|\.exe -steam"
+    if subprocess.run(["pgrep", "-f", steam_game], capture_output=True).returncode == 0:
+        return "steam"
     # Fallback: usa a janela focada no compositor (Sway/Hyprland).
     # Cobre Steam e qualquer outro launcher sem precisar listar processos por nome.
-    # O kiosk da TV (librewolf) e foco vazio nao contam como jogo.
+    # O kiosk da TV (librewolf), Steam client e foco vazio nao contam como jogo.
     app = focused_app()
-    if app and "librewolf" not in app:
+    if app and not any(x in app for x in ("librewolf", "steam")):
         return app
     return None
 
@@ -1910,17 +1913,26 @@ function dpad(el){
 }
 dpad(document.getElementById('dpad'));
 
-function stick(pad,knob,which){
-  let id=null,last=0,px=0,py=0;
-  function move(t){const r=pad.getBoundingClientRect(),R=r.width/2;let dx=t.clientX-(r.left+R),dy=t.clientY-(r.top+R);const d=Math.hypot(dx,dy);if(d>R){dx*=R/d;dy*=R/d;}knob.style.transform=`translate(calc(-50% + ${dx}px),calc(-50% + ${dy}px))`;let x=Math.round(dx/R*32767),y=Math.round(dy/R*32767);if(Math.hypot(dx,dy)<R*0.10){x=0;y=0;}const now=Date.now();if(now-last>16&&(x!==px||y!==py)){last=now;px=x;py=y;post({axis:which,x,y});}}
-  function reset(){knob.style.transform='translate(-50%,-50%)';px=py=0;post({axis:which,x:0,y:0});}
-  pad.addEventListener('touchstart',ev=>{ev.preventDefault();if(id===null){id=ev.changedTouches[0].identifier;buzz(10);move(ev.changedTouches[0]);}},{passive:false});
+function stick(pad,knob,which,floating=false){
+  let id=null,last=0,px=0,py=0,ox=0,oy=0;
+  function origin(t){const r=pad.getBoundingClientRect();ox=t.clientX-r.left;oy=t.clientY-r.top;
+    knob.style.left=ox+'px';knob.style.top=oy+'px';knob.style.transform='translate(-50%,-50%)';}
+  function center(){const r=pad.getBoundingClientRect();ox=r.width/2;oy=r.height/2;
+    knob.style.left='50%';knob.style.top='50%';}
+  function move(t){const r=pad.getBoundingClientRect(),R=r.width*(floating?0.32:0.5);
+    let dx=t.clientX-r.left-ox,dy=t.clientY-r.top-oy;const d=Math.hypot(dx,dy);
+    if(d>R){dx*=R/d;dy*=R/d;}knob.style.transform=`translate(calc(-50% + ${dx}px),calc(-50% + ${dy}px))`;
+    let x=Math.round(dx/R*32767),y=Math.round(dy/R*32767);if(Math.hypot(dx,dy)<R*0.10){x=0;y=0;}
+    const now=Date.now();if(now-last>16&&(x!==px||y!==py)){last=now;px=x;py=y;post({axis:which,x,y});}}
+  function reset(){center();knob.style.transform='translate(-50%,-50%)';px=py=0;post({axis:which,x:0,y:0});}
+  center();
+  pad.addEventListener('touchstart',ev=>{ev.preventDefault();if(id===null){id=ev.changedTouches[0].identifier;buzz(10);if(floating)origin(ev.changedTouches[0]);move(ev.changedTouches[0]);}},{passive:false});
   pad.addEventListener('touchmove',ev=>{ev.preventDefault();for(const t of ev.changedTouches)if(t.identifier===id)move(t);},{passive:false});
   const end=ev=>{ev.preventDefault();for(const t of ev.changedTouches)if(t.identifier===id){id=null;reset();}};
   pad.addEventListener('touchend',end,{passive:false});pad.addEventListener('touchcancel',end,{passive:false});
-  pad.addEventListener('mousedown',ev=>{id='m';move(ev)});window.addEventListener('mousemove',ev=>{if(id==='m')move(ev)});window.addEventListener('mouseup',()=>{if(id==='m'){id=null;reset()}});
+  pad.addEventListener('mousedown',ev=>{id='m';if(floating)origin(ev);move(ev)});window.addEventListener('mousemove',ev=>{if(id==='m')move(ev)});window.addEventListener('mouseup',()=>{if(id==='m'){id=null;reset()}});
 }
-stick(document.getElementById('ls'),document.getElementById('lk'),1);
+stick(document.getElementById('ls'),document.getElementById('lk'),1,true);
 stick(document.getElementById('rs'),document.getElementById('rk'),2);
 
 let lock=null;
