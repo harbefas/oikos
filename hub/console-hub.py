@@ -1037,6 +1037,14 @@ body[data-mode=media] #miniplayer,body[data-inpad="1"] #miniplayer{display:none!
 #ls,#dpad,#rs{position:absolute;transition:left .2s,right .2s,bottom .2s,width .2s,height .2s}
 #ls{border-radius:50%;background:radial-gradient(circle,#232833,#1a1e26);border:2px solid #333a47}
 #lk{width:42%;height:42%;background:#4f8cff;box-shadow:0 4px 18px #0009}
+#ls.floating-stick{background:transparent!important;border:0}
+#ls.floating-stick::before{content:'';position:absolute;left:var(--joy-x,50%);top:var(--joy-y,50%);
+  width:64%;height:64%;border-radius:50%;transform:translate(-50%,-50%);
+  background:radial-gradient(circle,#232833,#1a1e26);border:2px solid #333a47;
+  opacity:0;transition:opacity .08s;pointer-events:none}
+#ls.floating-stick.active::before{opacity:1}
+#ls.floating-stick #lk{width:24%;height:24%;opacity:0}
+#ls.floating-stick.active #lk{opacity:1}
 #rs{border-radius:50%;background:radial-gradient(circle,#2a2618,#201d14);border:2px solid #46402a}
 #rk{width:44%;height:44%;background:#e8c33a;box-shadow:0 4px 18px #0009}
 .knob{position:absolute;left:50%;top:50%;border-radius:50%;transform:translate(-50%,-50%);pointer-events:none}
@@ -1917,7 +1925,9 @@ dpad(document.getElementById('dpad'));
 function stick(pad,knob,which,floating=false){
   let id=null,last=0,px=0,py=0,ox=0,oy=0;
   function origin(t){const r=pad.getBoundingClientRect();ox=t.clientX-r.left;oy=t.clientY-r.top;
-    knob.style.left=ox+'px';knob.style.top=oy+'px';knob.style.transform='translate(-50%,-50%)';}
+    pad.style.setProperty('--joy-x',ox+'px');pad.style.setProperty('--joy-y',oy+'px');
+    pad.classList.add('active');knob.style.left=ox+'px';knob.style.top=oy+'px';
+    knob.style.transform='translate(-50%,-50%)';}
   function center(){const r=pad.getBoundingClientRect();ox=r.width/2;oy=r.height/2;
     knob.style.left='50%';knob.style.top='50%';}
   function move(t){const r=pad.getBoundingClientRect(),R=r.width*(floating?0.32:0.5);
@@ -1925,7 +1935,8 @@ function stick(pad,knob,which,floating=false){
     if(d>R){dx*=R/d;dy*=R/d;}knob.style.transform=`translate(calc(-50% + ${dx}px),calc(-50% + ${dy}px))`;
     let x=Math.round(dx/R*32767),y=Math.round(dy/R*32767);if(Math.hypot(dx,dy)<R*0.10){x=0;y=0;}
     const now=Date.now();if(now-last>16&&(x!==px||y!==py)){last=now;px=x;py=y;post({axis:which,x,y});}}
-  function reset(){center();knob.style.transform='translate(-50%,-50%)';px=py=0;post({axis:which,x:0,y:0});}
+  function reset(){center();if(floating)pad.classList.remove('active');knob.style.transform='translate(-50%,-50%)';px=py=0;post({axis:which,x:0,y:0});}
+  if(floating)pad.classList.add('floating-stick');
   center();
   pad.addEventListener('touchstart',ev=>{ev.preventDefault();if(id===null){id=ev.changedTouches[0].identifier;buzz(10);if(floating)origin(ev.changedTouches[0]);move(ev.changedTouches[0]);}},{passive:false});
   pad.addEventListener('touchmove',ev=>{ev.preventDefault();for(const t of ev.changedTouches)if(t.identifier===id)move(t);},{passive:false});
