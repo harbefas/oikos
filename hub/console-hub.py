@@ -285,22 +285,25 @@ BUTTONS = {
     "r3": e.BTN_THUMBR, "up": e.BTN_DPAD_UP, "down": e.BTN_DPAD_DOWN,
     "left": e.BTN_DPAD_LEFT, "right": e.BTN_DPAD_RIGHT,
 }
-ai = AbsInfo(value=0, min=-AMAX, max=AMAX, fuzz=0, flat=512, resolution=0)
+AXIS_INFO = AbsInfo(value=0, min=-AMAX, max=AMAX, fuzz=16, flat=512, resolution=0)
 CAPS = {e.EV_KEY: list(BUTTONS.values()),
-        e.EV_ABS: [(e.ABS_X, ai), (e.ABS_Y, ai), (e.ABS_RX, ai), (e.ABS_RY, ai)]}
-def _mkpad():
+        e.EV_ABS: [
+            (e.ABS_X, AXIS_INFO), (e.ABS_Y, AXIS_INFO),
+            (e.ABS_RX, AXIS_INFO), (e.ABS_RY, AXIS_INFO),
+        ]}
+def _mkpad(player):
     """Cria um gamepad uinput; None se /dev/uinput nao estiver acessivel
     (sem grupo input / sem regra udev). Assim o hub ainda sobe pra midia/UI."""
     try:
-        return UInput(CAPS, name="Homelab Virtual Gamepad",
-                      vendor=0x1234, product=0x5678, version=1)
+        return UInput(CAPS, name=f"Homelab Virtual Xbox 360 Pad P{player}",
+                      vendor=0x045e, product=0x028e, version=0x0110)
     except Exception as ex:
         print(f"[warn] uinput indisponivel ({ex}); gamepad off (midia/UI seguem). "
               f"Pra ligar: usuario no grupo 'input' + regra udev em /dev/uinput.")
         return None
 
 
-PADS = {1: _mkpad(), 2: _mkpad()}
+PADS = {1: _mkpad(1), 2: _mkpad(2)}
 
 
 def _mkkbd():
