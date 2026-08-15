@@ -281,7 +281,7 @@ APPS = [
 
 # --- gamepads (identicos ao padserver de 2 jogadores) ---
 BUTTONS = {
-    "b": e.BTN_SOUTH, "a": e.BTN_EAST, "x": e.BTN_NORTH, "y": e.BTN_WEST,
+    "a": e.BTN_SOUTH, "b": e.BTN_EAST, "x": e.BTN_WEST, "y": e.BTN_NORTH,
     "l": e.BTN_TL, "r": e.BTN_TR, "z": e.BTN_TL2, "r2": e.BTN_TR2,
     "select": e.BTN_SELECT, "start": e.BTN_START, "l3": e.BTN_THUMBL,
     "r3": e.BTN_THUMBR, "up": e.BTN_DPAD_UP, "down": e.BTN_DPAD_DOWN,
