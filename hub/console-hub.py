@@ -874,7 +874,7 @@ html,body{height:100%;color:#eef1f6;overflow:hidden;
 #tabgrip{position:fixed;bottom:0;left:0;right:0;height:26px;z-index:17;display:flex;
   align-items:flex-end;justify-content:center;padding-bottom:6px}
 #tabgrip i{width:46px;height:5px;border-radius:3px;background:var(--ui-2);opacity:.65}
-body[data-inpad="1"] #tabgrip{display:none}
+body[data-inpad="1"]:not([data-mode=home]) #tabgrip{display:none}
 #tabs button{flex:1;background:0;border:0;color:#7d8595;font:inherit;font-size:11px;font-weight:600;
   display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;letter-spacing:.02em}
 #tabs button .i{font-size:21px}
@@ -1412,7 +1412,7 @@ checkPC(); setInterval(checkPC,15000);
 // --- barra de menu auto-escondida (aparece so quando chamada) ---
 const _tabs=document.getElementById('tabs'); let _tabsT=null;
 function hideTabs(){_tabs.classList.remove('show');clearTimeout(_tabsT);}
-function showTabs(){if(document.body.dataset.inpad==='1')return;
+function showTabs(){if(document.body.dataset.inpad==='1'&&document.body.dataset.mode!=='home')return;
   _tabs.classList.add('show');clearTimeout(_tabsT);_tabsT=setTimeout(()=>_tabs.classList.remove('show'),3200);}
 (function(){const g=document.getElementById('tabgrip');
   g.addEventListener('touchstart',e=>{e.preventDefault();showTabs();},{passive:false});
@@ -1791,6 +1791,7 @@ async function refreshStatus(){
   document.body.dataset.mode = s.kind==='media' ? 'media' : (s.kind==='home' ? 'home' : 'game');
   if(document.body.dataset.inpad==='1'){
     if(document.body.dataset.mode==='game') lockLandscape(); else unlockOrient();
+    if(document.body.dataset.mode!=='home') hideTabs();
   }
   if(!s.running){ mp.classList.remove('on'); return; }
   mp.classList.add('on');
