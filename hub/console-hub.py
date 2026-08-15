@@ -1032,60 +1032,73 @@ body[data-inpad="1"]:not([data-mode=home]) #tabgrip{display:none}
 /* no modo controle (pad) o mini-player some (ja tem o painel completo) */
 body[data-mode=media] #miniplayer,body[data-inpad="1"] #miniplayer{display:none!important}
 /* controle: reaproveita o gamepad; escondido ate a aba */
-#pad{position:fixed;inset:0;background:#111318;display:none}
+#pad{position:fixed;inset:0;background:#111318;display:none;overflow:hidden}
 #pad.on{display:block}
 /* --- estilos do gamepad (copiado do padserver) --- */
 #pad *{touch-action:none}
 .p{position:absolute}
 /* aparencia dos analogicos + d-pad (posicao vem dos "slots" abaixo) */
 #ls,#dpad,#rs{position:absolute;transition:left .2s,right .2s,bottom .2s,width .2s,height .2s}
-#ls{border-radius:50%;background:radial-gradient(circle,#232833,#1a1e26);border:2px solid #333a47}
+#ls{border-radius:50%;background:radial-gradient(circle at 38% 32%,#303744,#171b23 72%);border:2px solid #333a47}
 #lk{width:42%;height:42%;background:#4f8cff;box-shadow:0 4px 18px #0009}
 #ls.floating-stick{background:transparent!important;border:0}
 #ls.floating-stick::before{content:'';position:absolute;left:var(--joy-x,50%);top:var(--joy-y,50%);
   width:64%;height:64%;border-radius:50%;transform:translate(-50%,-50%);
-  background:radial-gradient(circle,#232833,#1a1e26);border:2px solid #333a47;
+  background:radial-gradient(circle at 38% 32%,#303744,#171b23 72%);border:2px solid #333a47;
   opacity:0;transition:opacity .08s;pointer-events:none}
 #ls.floating-stick.active::before{opacity:1}
 #ls.floating-stick #lk{width:24%;height:24%;opacity:0}
 #ls.floating-stick.active #lk{opacity:1}
-#rs{border-radius:50%;background:radial-gradient(circle,#2a2618,#201d14);border:2px solid #46402a}
+#rs{border-radius:50%;background:radial-gradient(circle at 38% 32%,#302d23,#191812 72%);border:2px solid #46402a}
 #rk{width:44%;height:44%;background:#e8c33a;box-shadow:0 4px 18px #0009}
 .knob{position:absolute;left:50%;top:50%;border-radius:50%;transform:translate(-50%,-50%);pointer-events:none}
 #dpad{display:grid;gap:.7vh}
 #dpad button{border-radius:1.6vh;opacity:.9}
 /* SLOT PRIMARIO (grande, canto inf esquerdo): analogico por padrao; d-pad se data-dswap */
-body:not([data-dswap]) #ls, body[data-dswap] #dpad{left:3vw;bottom:4vh}
+body:not([data-dswap]) #ls, body[data-dswap] #dpad{left:3vw;bottom:5vh}
 body:not([data-dswap]) #ls{width:44vh;height:44vh;max-width:320px;max-height:320px}
 body[data-dswap] #dpad{grid-template-columns:repeat(3,12vh);grid-template-rows:repeat(3,12vh)}
 body[data-dswap] #dpad button{font-size:3.8vh}
 /* SLOT SECUNDARIO (menor, diagonal p/ o centro, acima dos de baixo): d-pad por padrao; analogico se dswap */
-body:not([data-dswap]) #dpad, body[data-dswap] #ls{left:20vw;bottom:50vh}
+body:not([data-dswap]) #dpad, body[data-dswap] #ls{left:20vw;bottom:48vh}
 body:not([data-dswap]) #dpad{grid-template-columns:repeat(3,8.5vh);grid-template-rows:repeat(3,8.5vh)}
 body:not([data-dswap]) #dpad button{font-size:3vh}
 body[data-dswap] #ls{width:30vh;height:30vh;max-width:210px;max-height:210px}
 /* 2o analogico: centro-direita, diagonal a partir dos botoes */
-#rs{right:28vw;bottom:50vh;width:27vh;height:27vh;max-width:195px;max-height:195px}
+#rs{right:28vw;bottom:48vh;width:27vh;height:27vh;max-width:195px;max-height:195px}
 /* botoes de acao: canto inferior direito (polegar dir) */
-#face{right:4vw;bottom:6vh;display:grid;grid-template-columns:repeat(3,14vh);grid-template-rows:repeat(3,14vh);gap:1.3vh}
-#face button{border-radius:50%;font-size:4.2vh;background:#333a47}
-#face button[data-b=a]{background:#3d5a3d}#face button[data-b=b]{background:#5a3d3d}
-#tl{left:2vw;top:2vh;display:flex;flex-direction:column;gap:1.1vh}
-#tr{right:13vw;top:2vh;display:flex;flex-direction:column;gap:1.1vh}
-.trig{width:18vh;height:8.5vh;font-size:2.7vh;border-radius:2.2vh}
-#turbo{width:13vh;height:5.5vh;font-size:1.7vh!important;font-weight:800;letter-spacing:.04em;opacity:.55}
+#face{right:4vw;bottom:6vh;display:grid;grid-template-columns:repeat(3,13vh);grid-template-rows:repeat(3,13vh);gap:1.1vh}
+#face button{border-radius:50%;font-size:4vh;background:#333a47;box-shadow:inset 0 -5px 0 #0003,0 5px 16px #0006}
+#face .face-guide{align-self:center;justify-self:center;width:7vh;height:7vh;border-radius:50%;
+  display:grid;place-items:center;background:#202631;border:1px solid #ffffff12;color:#ffffff80;
+  font-size:1.6vh;font-weight:800;letter-spacing:.06em;box-shadow:inset 0 1px 0 #ffffff12}
+#face button[data-b=a]{background:#2f8f54}#face button[data-b=b]{background:#c94747}
+#face button[data-b=x]{background:#3478d4}#face button[data-b=y]{background:#d7a72f}
+#tl{left:3vw;top:2.2vh;display:grid;grid-template-columns:1fr 1fr;gap:1.1vh;width:min(33vw,260px)}
+#tr{right:3vw;top:2.2vh;display:grid;grid-template-columns:1fr 1fr;gap:1.1vh;width:min(33vw,260px)}
+.trig{height:clamp(46px,9vh,74px);font-size:clamp(16px,2.8vh,24px);border-radius:2.2vh;
+  box-shadow:inset 0 -5px 0 #0003,0 5px 16px #0005}
+.trig.trigger{height:clamp(54px,11vh,88px);border-radius:2.8vh;background:#242b37!important}
+#turbo{width:12vh;height:5.2vh;font-size:1.6vh!important;font-weight:800;letter-spacing:.04em;opacity:.55}
 #dpad button{pointer-events:none}   /* o container #dpad captura o toque (diagonais) */
-#mid{left:50%;top:3vh;transform:translateX(-50%);display:flex;gap:1.4vh;align-items:center}
-#mid button[data-b]{width:16vh;height:6vh;font-size:2vh;border-radius:3vh}
-#tomenu{width:6vh;height:6vh;font-size:3vh;border-radius:50%;background:#3a4150!important;opacity:.75}
+#mid{left:50%;top:2.6vh;transform:translateX(-50%);display:flex;gap:1.1vh;align-items:center;
+  padding:.8vh 1vh;border-radius:999px;background:#0b0d1180;border:1px solid #ffffff12;backdrop-filter:blur(10px)}
+#mid button[data-b]{width:12vh;height:5.6vh;font-size:1.8vh;border-radius:3vh}
+#tomenu{width:5.8vh;height:5.8vh;font-size:2.8vh;border-radius:50%;background:#3a4150!important;opacity:.75}
 #swapd{position:absolute;left:50%;bottom:3vh;transform:translateX(-50%);width:11vh;height:6vh;
   border-radius:3vh;font-size:2.8vh;opacity:.6;z-index:4}
 body[data-mode=media] #swapd{display:none}
-#pnum{font-size:2.2vh;font-weight:800;padding:0 1.5vh;opacity:.5}
+#pnum{font-size:2vh;font-weight:800;padding:0 1vh;opacity:.5;white-space:nowrap}
 #pad button{border:0;color:#e6e6e6;font:inherit;font-weight:700;background:#2b303c}
-#pad button:active,#pad button.on{background:#4f8cff;color:#fff}
-.lbl{position:absolute;bottom:.6vh;left:50%;transform:translateX(-50%);font-size:1.3vh;opacity:.35}
+#pad button:active,#pad button.on{background:#4f8cff;color:#fff;transform:translateY(2px)}
+.lbl{position:absolute;bottom:.8vh;left:50%;transform:translateX(-50%);font-size:1.3vh;font-weight:800;opacity:.35;letter-spacing:.04em}
 body[data-p="2"] #pnum{color:#e8552d}
+@media (max-height:430px){
+  #face{grid-template-columns:repeat(3,12vh);grid-template-rows:repeat(3,12vh)}
+  body:not([data-dswap]) #dpad, body[data-dswap] #ls{bottom:45vh}
+  #rs{bottom:45vh}
+  .trig{height:8vh}.trig.trigger{height:9.5vh}
+}
 /* controle de midia (mpv) — substitui o gamepad quando toca filme/musica.
    usa vmin (escala pela MENOR dimensao) + clamp: fica bom em paisagem e retrato */
 #mediactl{position:absolute;inset:0;display:none;flex-direction:column;
@@ -1227,8 +1240,11 @@ body[data-p="2"] #pnum{color:var(--p2)}
 #pad button{background:var(--ui)!important;color:var(--tx)!important}
 #pad button:active,#pad button.on{background:var(--accent)!important;color:#fff!important}
 #tomenu{background:var(--ui)!important}
-#face button[data-b=a]{background:var(--accent-2)!important}
-#face button[data-b=b]{background:var(--p2)!important}
+#face button[data-b=a]{background:#2f8f54!important;color:#fff!important}
+#face button[data-b=b]{background:#c94747!important;color:#fff!important}
+#face button[data-b=x]{background:#3478d4!important;color:#fff!important}
+#face button[data-b=y]{background:#d7a72f!important;color:#1f1600!important}
+#face .face-guide{background:var(--surface);border-color:var(--border);color:var(--tx-3)}
 #turbo.on{background:var(--accent)!important;color:#fff!important;opacity:1!important}
 #ls{background:radial-gradient(circle,var(--surface),var(--bg2))!important;border:2px solid var(--ui)!important}
 #rs{background:radial-gradient(circle,var(--surface),var(--bg2))!important;border:2px solid var(--ui)!important}
@@ -1295,13 +1311,13 @@ body[data-p="2"] #pnum{color:var(--p2)}
 <div id=pad>
   <div id=np-bg></div>
   <button id=tvbtn onclick="openTv()">📺</button>
-  <div class="p" id=tl><button class=trig data-b=l>L1</button><button class=trig data-b=z>L2</button></div>
-  <div class="p" id=tr><button class=trig data-b=r>R1</button><button class=trig data-b=r2>R2</button></div>
-  <div class="p" id=mid><button id=tomenu>☰</button><button data-b=start>START</button><button id=turbo>TURBO</button><span id=pnum>P1</span><button data-b=select>SEL</button></div>
+  <div class="p" id=tl><button class="trig trigger" data-b=z>LT</button><button class=trig data-b=l>LB</button></div>
+  <div class="p" id=tr><button class=trig data-b=r>RB</button><button class="trig trigger" data-b=r2>RT</button></div>
+  <div class="p" id=mid><button id=tomenu>☰</button><button data-b=select>VIEW</button><span id=pnum>P1</span><button data-b=start>MENU</button><button id=turbo>TURBO</button></div>
   <div id=dpad><div></div><button data-b=up>▲</button><div></div><button data-b=left>◀</button><div></div><button data-b=right>▶</button><div></div><button data-b=down>▼</button><div></div></div>
-  <div class="p" id=face><div></div><button data-b=y>Y</button><div></div><button data-b=x>X</button><div></div><button data-b=a>A</button><div></div><button data-b=b>B</button><div></div></div>
-  <div class="p" id=ls><div class=knob id=lk></div><span class=lbl>ANALÓGICO</span></div>
-  <div class="p" id=rs><div class=knob id=rk></div><span class=lbl>C</span></div>
+  <div class="p" id=face><div></div><button data-b=y>Y</button><div></div><button data-b=x>X</button><div class=face-guide>XB</div><button data-b=b>B</button><div></div><button data-b=a>A</button><div></div></div>
+  <div class="p" id=ls><div class=knob id=lk></div><span class=lbl>LS</span></div>
+  <div class="p" id=rs><div class=knob id=rk></div><span class=lbl>RS</span></div>
   <button id=swapd title="trocar d-pad / analógico">⇄</button>
 
   <div id=mediactl>
