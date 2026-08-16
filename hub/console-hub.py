@@ -2765,6 +2765,13 @@ class Handler(BaseHTTPRequestHandler):
     def _send_ws_frame(self, opcode, data=b""):
         self.connection.sendall(bytes([0x80 | opcode, len(data)]) + data)
 
+    def _no_content(self):
+        self.send_response(204)
+        self.send_header("Content-Length", "0")
+        self.send_header("Connection", "close")
+        self.end_headers()
+        self.close_connection = True
+
     def _pad_ws(self):
         global PAD_WS_CLIENTS
         key = self.headers.get("Sec-WebSocket-Key", "")
@@ -2801,6 +2808,7 @@ class Handler(BaseHTTPRequestHandler):
             PAD_WS_CLIENTS = max(0, PAD_WS_CLIENTS - 1)
             PAD_WS_BY_PLAYER[player] = max(0, PAD_WS_BY_PLAYER.get(player, 0) - 1)
             reap_idle_pads()
+            self.close_connection = True
 
     def do_GET(self):
         path = urlparse(self.path).path
@@ -3065,7 +3073,7 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/p":
             try:
                 handle_pad_event(d)
-                self.send_response(204); self.end_headers()
+                self._no_content()
             except Exception:
                 self.send_response(400); self.end_headers()
 
