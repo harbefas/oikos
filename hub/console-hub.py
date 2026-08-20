@@ -2020,6 +2020,9 @@ async function openEps(series){
   });
 }
 function closeEps(){document.getElementById('eplist').classList.remove('on');}
+// mesmo motivo do SEARCH_ITEM: caminho de arquivo pode ter apostrofo
+// (ex: "Ferris Bueller's Day Off") e quebrar o atributo onclick='...'
+let DETAIL_PLAY=null;
 async function openDetail(id, kind, cover, moviePath){
   const ov=document.getElementById('detail');
   document.getElementById('dt-hero').style.backgroundImage='';
@@ -2031,8 +2034,9 @@ async function openDetail(id, kind, cover, moviePath){
   const genres=(d.genres||[]).slice(0,4).join(' · ');
   const posterImg=(d.cover||cover)?`<div class=dt-poster style="background-image:url(${d.cover||cover})"></div>`:'';
   const cast=(d.cast||[]).map(c=>`<div class=dt-cast>${c.img?`<div class=dt-face style="background-image:url(${c.img})"></div>`:'<div class="dt-face nf">👤</div>'}<div class=dt-cn>${c.name}</div>${c.role?`<div class=dt-cr>${c.role}</div>`:''}</div>`).join('');
+  DETAIL_PLAY={path:d.path||moviePath,cover:d.cover||cover||null};
   const action = kind==='movie'
-    ? `<button class=dt-play onclick='closeDetail();play(${JSON.stringify(d.path||moviePath)},"movie",${JSON.stringify(d.cover||cover||null)})'>▶ Assistir</button>` : '';
+    ? `<button class=dt-play onclick='closeDetail();play(DETAIL_PLAY.path,"movie",DETAIL_PLAY.cover)'>▶ Assistir</button>` : '';
   document.getElementById('dt-body').innerHTML=`
     <div class=dt-top>${posterImg}<div class=dt-head>
       <div class=dt-title>${d.name||''}</div>
@@ -2055,7 +2059,13 @@ function closeDetail(){document.getElementById('detail').classList.remove('on');
 
 // resultado de busca (Radarr/Sonarr/Lidarr) -- mesma tela de detalhe do item ja
 // baixado, so troca "Assistir/Jogar" por "Baixar" quando ainda nao esta na biblioteca
+// item da busca atual, pra botao nao precisar serializar o objeto inteiro
+// (com overview etc) dentro de um atributo HTML onclick='...' -- titulo/
+// overview com apostrofo (ex: "doesn't") quebrava o atributo no meio,
+// corrompendo o HTML e deixando o botao morto silenciosamente.
+let SEARCH_ITEM=null;
 function openSearchDetail(kind,r){
+  SEARCH_ITEM=r;
   const ov=document.getElementById('detail');
   document.getElementById('dt-hero').style.backgroundImage=r.poster
     ?`linear-gradient(180deg,#10141cbb,#10141c),url(${r.poster})`:'';
@@ -2064,11 +2074,11 @@ function openSearchDetail(kind,r){
   const posterImg=r.poster?`<div class=dt-poster style="background-image:url(${r.poster})"></div>`:'';
   const action=r.have
     ?'<button class=dt-play style="opacity:.6" disabled>✓ já está na biblioteca</button>'
-    :`<button class=dt-play onclick='closeDetail();reqItem(${JSON.stringify(kind)},${JSON.stringify(r)})'>⬇ Baixar</button>`;
+    :`<button class=dt-play onclick='closeDetail();reqItem(${JSON.stringify(kind)},SEARCH_ITEM)'>⬇ Baixar</button>`;
   const streamBtn = (kind==='movie' && !r.have)
-    ? `<button class=dt-play style="margin-left:8px" onclick='pickStream(${JSON.stringify(r)})'>▶ Assistir agora</button>`
+    ? `<button class=dt-play style="margin-left:8px" onclick='pickStream(SEARCH_ITEM)'>▶ Assistir agora</button>`
     : (kind==='series' && !r.have)
-    ? `<button class=dt-play style="margin-left:8px" onclick='showEpisodePicker(${JSON.stringify(r)})'>▶ Assistir agora</button>`
+    ? `<button class=dt-play style="margin-left:8px" onclick='showEpisodePicker(SEARCH_ITEM)'>▶ Assistir agora</button>`
     : '';
   document.getElementById('dt-body').innerHTML=`
     <div class=dt-top>${posterImg}<div class=dt-head>
@@ -2092,7 +2102,7 @@ function showEpisodePicker(r){
     <div style="display:flex;gap:8px;align-items:center;padding:0 4px 12px">
       <label style="opacity:.6;font-size:.85em">Temp.<input id=epS type=number min=1 value=1 style="width:52px;margin-left:4px"></label>
       <label style="opacity:.6;font-size:.85em">Ep.<input id=epE type=number min=1 value=1 style="width:52px;margin-left:4px"></label>
-      <button class=dt-play onclick='pickStream(${JSON.stringify(r)},+document.getElementById("epS").value,+document.getElementById("epE").value)'>Buscar</button>
+      <button class=dt-play onclick='pickStream(SEARCH_ITEM,+document.getElementById("epS").value,+document.getElementById("epE").value)'>Buscar</button>
     </div>`;
 }
 
