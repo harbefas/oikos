@@ -780,7 +780,7 @@ def search_movies(term):
                        if i.get("coverType") == "poster"), None)
         rating = m.get("ratings", {}).get("imdb", {}).get("value")
         out.append({"title": m["title"], "year": m.get("year"),
-                    "tmdbId": m.get("tmdbId"),
+                    "tmdbId": m.get("tmdbId"), "imdbId": m.get("imdbId"),
                     "poster": f"/img?u={urllib.parse.quote(poster)}" if poster else None,
                     "have": m.get("id", 0) > 0,
                     "overview": m.get("overview", ""), "genres": m.get("genres", []),
@@ -812,6 +812,26 @@ def request_movie(tmdb_id):
         "addOptions": {"searchForMovie": True},
     }
     return radarr("/movie", body)
+
+
+def ensure_radarr_entry(tmdb_id):
+    """Cadastra o filme no Radarr sem baixar (monitored=False, sem busca) --
+    so pra ele existir na base e o Bazarr conseguir achar/baixar legenda pra
+    ele mesmo no fluxo de streaming (filme que ainda nao foi baixado)."""
+    hits = radarr(f"/movie/lookup/tmdb?tmdbId={tmdb_id}")
+    m = hits[0] if isinstance(hits, list) else hits
+    if m.get("id", 0) > 0:
+        return m["id"]
+    qp = _prof1080(radarr("/qualityprofile"))
+    root = radarr("/rootfolder")[0]["path"]
+    body = {
+        "title": m["title"], "tmdbId": m["tmdbId"], "year": m.get("year"),
+        "titleSlug": m["titleSlug"], "images": m.get("images", []),
+        "qualityProfileId": qp, "rootFolderPath": root,
+        "monitored": False,
+        "addOptions": {"searchForMovie": False},
+    }
+    return radarr("/movie", body)["id"]
 
 
 SONARR = "http://localhost:8989/api/v3"
@@ -941,6 +961,58 @@ except Exception:
 
 TORRSERVER = os.environ.get("OIKOS_TORRSERVER", "http://localhost:8090").rstrip("/")
 
+BAZARR = "http://localhost:6767/api"
+try:
+    BAZARR_KEY = os.environ.get("OIKOS_BAZARR_KEY", "").strip()
+    if not BAZARR_KEY:
+        BAZARR_KEY = subprocess.run(
+            ["docker", "exec", "bazarr", "sh", "-c",
+             "python3 -c \"import yaml;c=yaml.safe_load(open('/config/config/config.yaml'));"
+             "print(c.get('auth',{}).get('apikey') or c.get('general',{}).get('apikey') or '')\""],
+            capture_output=True, text=True).stdout.strip()
+except Exception:
+    BAZARR_KEY = ""
+
+
+def bazarr_req(path, data=None):
+    """data=None -> GET; data=dict -> POST form-encoded (e' o formato que a
+    API do Bazarr espera pros endpoints de providers/subtitles)."""
+    url = BAZARR + path
+    if data is None:
+        r = urllib.request.Request(url, headers={"X-API-KEY": BAZARR_KEY})
+    else:
+        r = urllib.request.Request(
+            url, data=urllib.parse.urlencode(data, doseq=True).encode(),
+            headers={"X-API-KEY": BAZARR_KEY,
+                     "Content-Type": "application/x-www-form-urlencoded"},
+            method="POST")
+    b = urllib.request.urlopen(r, timeout=30).read()
+    return json.loads(b) if b else None
+
+
+def fetch_subtitle_bazarr(tmdb_id):
+    """Cadastra o filme (sem baixar) e pede pro Bazarr buscar+baixar legenda
+    pt-BR usando os provedores que ele ja tem configurados (mesma conta que
+    baixa legenda pros filmes normais da biblioteca). Best-effort: qualquer
+    erro no caminho so significa "toca sem legenda", nao trava o streaming."""
+    rid = ensure_radarr_entry(tmdb_id)
+    time.sleep(3)   # Bazarr sincroniza a lista de filmes do Radarr periodicamente
+    hits = bazarr_req(f"/providers/movies?radarrid={rid}&language=pt-BR")
+    cands = hits.get("data") if isinstance(hits, dict) else hits
+    if not cands:
+        return None
+    pick = cands[0]
+    bazarr_req("/subtitles", {
+        "radarrid": rid, "language": "pt-BR", "hi": "false", "forced": "false",
+        "provider": pick.get("provider"), "subtitle": pick.get("subtitle"),
+    })
+    movie = bazarr_req(f"/movies?radarrid[]={rid}")
+    rows = movie.get("data") if isinstance(movie, dict) else movie
+    for sub in (rows[0].get("subtitles") or []) if rows else []:
+        if sub.get("path") and "pt" in (sub.get("code2") or "").lower():
+            return sub["path"]
+    return None
+
 
 def prowlarr(path):
     r = urllib.request.Request(PROWLARR + path,
@@ -992,11 +1064,15 @@ def _torrserver(action, **body):
     return json.loads(urllib.request.urlopen(r, timeout=30).read())
 
 
+SUB_EXTS = (".srt", ".ass", ".vtt", ".sub")
+
+
 def stream_magnet(link):
     """Manda o magnet pro TorrServer, espera o metadata resolver (polling --
     o /torrents 'add' e assincrono, so devolve stat=1 'getting info' na hora)
-    e devolve a URL HTTP do maior arquivo de video do torrent -- mpv abre URL
-    igual arquivo local, entao toca enquanto baixa (streaming, sem 100%)."""
+    e devolve (url do video, url da legenda embutida no torrent ou None).
+    mpv abre URL igual arquivo local, entao toca enquanto baixa (streaming,
+    sem esperar 100%)."""
     magnet = _resolve_magnet(link)
     added = _torrserver("add", link=magnet, save_to_db=False)
     h = added["hash"]
@@ -1010,9 +1086,17 @@ def stream_magnet(link):
     if not files:
         raise RuntimeError("torrent sem seeds / metadata nao resolveu a tempo")
     f = max(files, key=lambda x: x.get("length", 0))
-    name = os.path.basename(f["path"])
-    return (f"{TORRSERVER}/stream/{urllib.parse.quote(name)}"
-            f"?link={h}&index={f['id']}&play")
+
+    def _url(fs):
+        return (f"{TORRSERVER}/stream/{urllib.parse.quote(os.path.basename(fs['path']))}"
+                f"?link={h}&index={fs['id']}&play")
+
+    subs = [s for s in files if s["id"] != f["id"]
+            and s["path"].lower().endswith(SUB_EXTS)]
+    # prioriza legenda com "pt"/"por" no nome (padrao de release), senao pega a 1a
+    sub = next((s for s in subs if re.search(r"\bp[to]r?\b|portuguese", s["path"], re.I)),
+               subs[0] if subs else None)
+    return _url(f), (_url(sub) if sub else None)
 
 
 def get_downloads():
@@ -1976,6 +2060,15 @@ function openSearchDetail(kind,r){
 
 // ---------- streaming direto (tipo Stremio): busca magnet no Prowlarr,
 // escolhe a melhor opcao e toca no mpv sem esperar o download terminar ----------
+const gb=n=>n?(n/1e9).toFixed(1)+' GB':'?';
+const BAD_SRC=/\bcam\b|\bts\b|\bhdcam\b|\btelesync\b/i;
+
+// escolha padrao: melhor fonte por seeders, descartando cam/ts (qualidade ruim)
+function bestSource(opts){
+  const good=opts.filter(o=>!BAD_SRC.test(o.title));
+  return (good.length?good:opts)[0];
+}
+
 async function pickStream(r){
   const ov=document.getElementById('detail');
   document.getElementById('dt-hero').style.backgroundImage='';
@@ -1987,22 +2080,26 @@ async function pickStream(r){
     document.getElementById('dt-body').innerHTML='<div style="padding:40px;text-align:center;opacity:.5">nenhuma fonte encontrada</div>';
     return;
   }
-  const gb=n=>n?(n/1e9).toFixed(1)+' GB':'?';
+  showSourceList(r,opts,true);
+}
+
+function showSourceList(r,opts,auto){
   document.getElementById('dt-body').innerHTML=`
-    <div class=dt-sec>Escolha a fonte — ${r.title}</div>
-    <div id=streampicks>${opts.map((o,i)=>`
-      <div class=ep onclick='startStream(${JSON.stringify(o.link)},${JSON.stringify(r.poster||null)})'>
+    <div class=dt-sec>${auto?'Conectando na melhor fonte — ':'Escolha a fonte — '}${r.title}</div>
+    <div id=streampicks>${opts.map(o=>`
+      <div class=ep onclick='startStream(${JSON.stringify(o.link)},${JSON.stringify(r.poster||null)},${JSON.stringify(r.tmdbId||null)})'>
         <div>${o.title}</div>
         <div style="opacity:.5;font-size:.85em">${gb(o.size)} · ${o.seeders} seeders · ${o.indexer||''}</div>
       </div>`).join('')}</div>`;
+  if(auto) startStream(bestSource(opts).link, r.poster||null, r.tmdbId||null);
 }
 
-async function startStream(link,cover){
-  document.getElementById('dt-body').innerHTML='<div style="padding:40px;text-align:center;opacity:.5">conectando torrent…</div>';
+async function startStream(link,cover,tmdbId){
+  toast('▶ conectando torrent…');
   const res=await fetch('/api/stream',{method:'POST',headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({link,cover})}).then(x=>x.json()).catch(()=>({ok:false}));
+    body:JSON.stringify({link,cover,tmdbId})}).then(x=>x.json()).catch(()=>({ok:false}));
   closeDetail();
-  if(res.ok){toast('▶ tocando na TV');setTimeout(refreshStatus,1500);showTab('pad');}
+  if(res.ok){toast(res.subtitle?'▶ tocando com legenda':'▶ tocando (sem legenda)');setTimeout(refreshStatus,1500);showTab('pad');}
   else toast('erro ao streamar: '+(res.error||'?'));
 }
 
@@ -3414,12 +3511,22 @@ class Handler(BaseHTTPRequestHandler):
                 self._json({"ok": False, "error": "sem link"}, 400)
             else:
                 try:
-                    url = stream_magnet(link)
+                    url, torrent_sub = stream_magnet(link)
+                    sub_path = None
+                    if d.get("tmdbId"):
+                        try:
+                            sub_path = fetch_subtitle_bazarr(d["tmdbId"])
+                        except Exception as ex:
+                            print(f"[stream] legenda via bazarr falhou: {ex}")
+                    sub = sub_path or torrent_sub
                     subprocess.run(["stop-game"])
                     STATE["cover"] = d.get("cover")
                     STATE["mkind"] = "movie"
-                    sway_exec("play-video '" + url.replace("'", "'\\''") + "'")
-                    self._json({"ok": True})
+                    cmd = "play-video '" + url.replace("'", "'\\''") + "'"
+                    if sub:
+                        cmd += " --sub-file='" + sub.replace("'", "'\\''") + "'"
+                    sway_exec(cmd)
+                    self._json({"ok": True, "subtitle": bool(sub)})
                 except Exception as ex:
                     self._json({"ok": False, "error": str(ex)[:160]}, 200)
 
