@@ -790,6 +790,10 @@ def radarr(path, data=None, method=None):
 
 def search_movies(term):
     hits = radarr("/movie/lookup?term=" + urllib.parse.quote(term))
+    # /movie/lookup nao devolve hasFile pra filme ja cadastrado (vem null) --
+    # sem isso "have" so significa "monitorado no Radarr", nao "da pra
+    # assistir". Busca a lista real pra saber quem tem arquivo de verdade.
+    has_file = {m["id"]: m.get("hasFile", False) for m in radarr("/movie")}
     out = []
     for m in hits[:20]:
         poster = next((i["remoteUrl"] for i in m.get("images", [])
@@ -798,7 +802,7 @@ def search_movies(term):
         out.append({"title": m["title"], "year": m.get("year"),
                     "tmdbId": m.get("tmdbId"), "imdbId": m.get("imdbId"),
                     "poster": f"/img?u={urllib.parse.quote(poster)}" if poster else None,
-                    "have": m.get("id", 0) > 0,
+                    "have": has_file.get(m.get("id", 0), False),
                     "overview": m.get("overview", ""), "genres": m.get("genres", []),
                     "rating": round(rating, 1) if rating else None,
                     "runtime": m.get("runtime") or None})
@@ -856,6 +860,9 @@ def sonarr(path, data=None, method=None):
 
 def search_series(term):
     hits = sonarr("/series/lookup?term=" + urllib.parse.quote(term))
+    # mesmo caso do search_movies: "monitorado" != "tem episodio baixado"
+    has_ep = {s["id"]: (s.get("statistics", {}).get("episodeFileCount") or 0) > 0
+              for s in sonarr("/series")}
     out = []
     for m in hits[:20]:
         poster = next((i["remoteUrl"] for i in m.get("images", [])
@@ -864,7 +871,7 @@ def search_series(term):
         out.append({"title": m["title"], "year": m.get("year"),
                     "tvdbId": m.get("tvdbId"), "imdbId": m.get("imdbId"),
                     "poster": f"/img?u={urllib.parse.quote(poster)}" if poster else None,
-                    "have": m.get("id", 0) > 0,
+                    "have": has_ep.get(m.get("id", 0), False),
                     "overview": m.get("overview", ""), "genres": m.get("genres", []),
                     "rating": round(rating, 1) if rating else None,
                     "runtime": m.get("runtime") or None})
