@@ -8,7 +8,7 @@ Estende o padserver. Alem de servir os gamepads virtuais (uinput), oferece:
 
 Lanca via `swaymsg exec` na sessao Sway. Sem app no celular.
 """
-import base64, hashlib, json, os, re, socket, struct, subprocess, time, urllib.parse, urllib.request, zlib
+import base64, hashlib, json, os, re, shlex, socket, struct, subprocess, time, urllib.parse, urllib.request, zlib
 from datetime import datetime
 from urllib.parse import urlparse, parse_qs
 
@@ -41,6 +41,7 @@ STATIC = os.environ.get("OIKOS_STATIC") or next(
     (p for p in (os.path.join(os.path.dirname(os.path.abspath(__file__)), "dist"),
                  os.path.join(os.path.dirname(os.path.abspath(__file__)), "ui", "dist"))
      if os.path.isdir(p)), "")
+UI_MODE = os.environ.get("OIKOS_UI", "legacy").strip().lower()
 STATE = {"cover": None, "mkind": None, "query": ""}   # cover/mkind: /api/play; query: teclado do celular -> busca na TV
 PAD_WS_CLIENTS = 0
 PAD_WS_BY_PLAYER = {1: 0, 2: 0}
@@ -276,8 +277,111 @@ APPS = [
     {"id": "librewolf", "label": "LibreWolf", "icon": "🌐", "cmd": "librewolf"},
     {"id": "navidrome", "label": "Música", "icon": "🎵",
      "cmd": "librewolf --kiosk http://localhost:4533"},
+    {"id": "steam",    "label": "Steam",   "icon": "🎮", "cmd": "steam"},
     {"id": "spotify",  "label": "Spotify", "icon": "🎧", "cmd": "run-spotify"},
 ]
+WEB_APPS_FILE = os.environ.get("OIKOS_WEB_APPS_FILE") or os.path.join(
+    os.environ.get("OIKOS_HOME", os.path.expanduser("~")), ".config/oikos/web-apps.json")
+
+
+def _web_app_id(label, url, used):
+    seed = label or urllib.parse.urlparse(url).netloc or "web"
+    base = re.sub(r"[^a-z0-9_-]+", "-", seed.lower()).strip("-_")[:24] or "web"
+    app_id = base
+    n = 2
+    while app_id in used:
+        suffix = f"-{n}"
+        app_id = f"{base[:32 - len(suffix)]}{suffix}"
+        n += 1
+    return app_id
+
+
+def normalize_web_app(item, used):
+    if not isinstance(item, dict):
+        return None
+    label = str(item.get("label", "")).strip()
+    url = str(item.get("url", "")).strip()
+    icon = str(item.get("icon", "🌐")).strip() or "🌐"
+    parsed = urllib.parse.urlparse(url)
+    if (not label
+            or parsed.scheme not in ("http", "https")
+            or not parsed.netloc):
+        return None
+    app_id = str(item.get("id", "")).strip()
+    if not re.fullmatch(r"[a-zA-Z0-9_-]{1,32}", app_id) or app_id in used:
+        app_id = _web_app_id(label, url, used)
+    used.add(app_id)
+    args = ["librewolf"]
+    if item.get("kiosk", True):
+        args.append("--kiosk")
+    args.append(url)
+    return {
+        "id": app_id,
+        "label": label[:40],
+        "icon": icon[:4],
+        "url": url,
+        "kiosk": bool(item.get("kiosk", True)),
+        "cmd": " ".join(shlex.quote(x) for x in args),
+    }
+
+
+def _read_web_apps_file():
+    try:
+        with open(WEB_APPS_FILE, encoding="utf-8") as f:
+            items = json.load(f)
+        return items if isinstance(items, list) else []
+    except FileNotFoundError:
+        return []
+    except Exception as ex:
+        print(f"[warn] could not read {WEB_APPS_FILE}: {ex}")
+        return []
+
+
+def _write_web_apps_file(items):
+    os.makedirs(os.path.dirname(WEB_APPS_FILE), exist_ok=True)
+    with open(WEB_APPS_FILE, "w", encoding="utf-8") as f:
+        json.dump(items, f, ensure_ascii=False, indent=2)
+        f.write("\n")
+
+
+def custom_web_apps():
+    sources = []
+    raw = os.environ.get("OIKOS_WEB_APPS", "").strip()
+    if raw:
+        try:
+            items = json.loads(raw)
+            if isinstance(items, list):
+                sources.extend(items)
+        except Exception as ex:
+            print(f"[warn] OIKOS_WEB_APPS invalid JSON: {ex}")
+    sources.extend(_read_web_apps_file())
+
+    out = []
+    used = {a["id"] for a in APPS}
+    for item in sources:
+        app = normalize_web_app(item, used)
+        if app:
+            out.append(app)
+    return out
+
+
+def list_apps():
+    return APPS + custom_web_apps()
+
+
+def add_web_app(item):
+    saved = _read_web_apps_file()
+    used = {a["id"] for a in APPS}
+    for existing in saved:
+        app = normalize_web_app(existing, used)
+        if app and app["url"] == str(item.get("url", "")).strip():
+            return app
+    app = normalize_web_app(item, used)
+    if not app:
+        return None
+    saved.append({k: app[k] for k in ("id", "label", "icon", "url", "kiosk")})
+    _write_web_apps_file(saved)
+    return app
 
 # --- gamepads (identicos ao padserver de 2 jogadores) ---
 BUTTONS = {
@@ -824,6 +928,93 @@ def request_artist(mbid):
     return lidarr("/artist", body)
 
 
+PROWLARR = "http://localhost:9696/api/v1"
+try:
+    PROWLARR_KEY = os.environ.get("OIKOS_PROWLARR_KEY", "").strip()
+    if not PROWLARR_KEY:
+        PROWLARR_KEY = subprocess.run(
+            ["docker", "exec", "prowlarr", "sh", "-c",
+             'grep -o "<ApiKey>[^<]*" /config/config.xml'],
+            capture_output=True, text=True).stdout.replace("<ApiKey>", "").strip()
+except Exception:
+    PROWLARR_KEY = ""
+
+TORRSERVER = os.environ.get("OIKOS_TORRSERVER", "http://localhost:8090").rstrip("/")
+
+
+def prowlarr(path):
+    r = urllib.request.Request(PROWLARR + path,
+        headers={"X-Api-Key": PROWLARR_KEY})
+    b = urllib.request.urlopen(r, timeout=30).read()
+    return json.loads(b) if b else None
+
+
+def search_stream(term):
+    """Busca magnet em todos os indexers do Prowlarr -- pra assistir na hora
+    (tipo Stremio), sem esperar o Radarr baixar o filme inteiro primeiro."""
+    hits = prowlarr("/search?query=" + urllib.parse.quote(term) +
+                     "&type=search&categories=2000")
+    out = []
+    for h in hits:
+        link = h.get("magnetUrl") or h.get("downloadUrl")
+        if not link:
+            continue
+        out.append({"title": h.get("title"), "size": h.get("size") or 0,
+                    "seeders": h.get("seeders") or 0, "indexer": h.get("indexer"),
+                    "link": link})
+    out.sort(key=lambda x: x["seeders"], reverse=True)
+    return out[:15]
+
+
+def _resolve_magnet(link):
+    """O link do Prowlarr e um proxy dele mesmo (pra indexers atras de
+    FlareSolverr etc) que devolve 301 pro magnet: de verdade. TorrServer nao
+    segue redirect de http -> magnet (troca de esquema), entao resolve aqui."""
+    if link.startswith("magnet:"):
+        return link
+    class _NoRedirect(urllib.request.HTTPRedirectHandler):
+        def redirect_request(self, *a, **k):
+            return None
+    opener = urllib.request.build_opener(_NoRedirect)
+    try:
+        opener.open(link, timeout=20)
+    except urllib.error.HTTPError as ex:
+        loc = ex.headers.get("Location")
+        if loc:
+            return loc
+    raise RuntimeError("nao achou magnet no link do indexer")
+
+
+def _torrserver(action, **body):
+    r = urllib.request.Request(TORRSERVER + "/torrents",
+        data=json.dumps({"action": action, **body}).encode(),
+        headers={"Content-Type": "application/json"}, method="POST")
+    return json.loads(urllib.request.urlopen(r, timeout=30).read())
+
+
+def stream_magnet(link):
+    """Manda o magnet pro TorrServer, espera o metadata resolver (polling --
+    o /torrents 'add' e assincrono, so devolve stat=1 'getting info' na hora)
+    e devolve a URL HTTP do maior arquivo de video do torrent -- mpv abre URL
+    igual arquivo local, entao toca enquanto baixa (streaming, sem 100%)."""
+    magnet = _resolve_magnet(link)
+    added = _torrserver("add", link=magnet, save_to_db=False)
+    h = added["hash"]
+    info = added
+    for _ in range(20):
+        if info.get("file_stats"):
+            break
+        time.sleep(2)
+        info = _torrserver("get", hash=h)
+    files = info.get("file_stats") or []
+    if not files:
+        raise RuntimeError("torrent sem seeds / metadata nao resolveu a tempo")
+    f = max(files, key=lambda x: x.get("length", 0))
+    name = os.path.basename(f["path"])
+    return (f"{TORRSERVER}/stream/{urllib.parse.quote(name)}"
+            f"?link={h}&index={f['id']}&play")
+
+
 def get_downloads():
     """Agrega a fila de Radarr + Sonarr: o que esta baixando, com progresso."""
     out = []
@@ -1027,6 +1218,11 @@ body[data-inpad="1"]:not([data-mode=home]) #tabgrip{display:none}
 .dt-shot{flex:0 0 200px;height:112px;border-radius:8px;background:#222 center/cover no-repeat}
 /* apps */
 #apps{padding:16px;display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:14px}
+.app-add{padding:16px 16px 0;display:grid;grid-template-columns:1fr;gap:8px}
+.app-add input,.app-add button{min-height:42px;border-radius:10px;font:inherit;font-size:14px}
+.app-add input{background:#1b1f28;border:1px solid #2b323d;color:#e8e8e8;padding:0 12px;outline:none}
+.app-add input:focus{border-color:#4f8cff}
+.app-add button{background:#2b303c;border:0;color:#e8e8e8;font-weight:600}
 .app{background:#1b1f28;border:1px solid #262b36;border-radius:12px;padding:22px 14px;
   display:flex;flex-direction:column;align-items:center;gap:10px;font-size:14px}
 .app:active{border-color:#4f8cff}
@@ -1123,6 +1319,8 @@ body[data-mode=media] #swapd{display:none}
 #pad button{border:0;color:#e6e6e6;font:inherit;font-weight:700;background:#2b303c}
 #pad button:active,#pad button.on{background:#4f8cff;color:#fff;transform:translateY(2px)}
 .lbl{position:absolute;bottom:.8vh;left:50%;transform:translateX(-50%);font-size:1.3vh;font-weight:800;opacity:.35;letter-spacing:.04em}
+#pad button.lbl{background:transparent;padding:.6vh 1vh}
+#pad button.lbl:active,#pad button.lbl.on{background:#4f8cff44;opacity:.9;transform:translateX(-50%)}
 body[data-p="2"] #pnum{color:#e8552d}
 @media (max-height:430px){
   #face{grid-template-columns:repeat(3,13vh);grid-template-rows:repeat(3,13vh);gap:.7vh}
@@ -1273,6 +1471,8 @@ body[data-profile=nintendo] #face .face-guide{color:#c94747}
 #pad{background:var(--bg)!important}
 #pad button{background:var(--ui)!important;color:var(--tx)!important}
 #pad button:active,#pad button.on{background:var(--accent)!important;color:#fff!important}
+#pad button.lbl{background:transparent!important}
+#pad button.lbl:active,#pad button.lbl.on{background:var(--accent)!important;opacity:.9}
 #tomenu{background:var(--ui)!important}
 #face button[data-b=a]{background:#2f8f54!important;color:#fff!important}
 #face button[data-b=b]{background:#c94747!important;color:#fff!important}
@@ -1287,6 +1487,8 @@ body[data-profile=nintendo] #face .face-guide{color:#c94747}
 .lbl,#pnum{color:var(--tx-2)}
 /* apps */
 .app{background:var(--surface)!important;border:1px solid var(--border)!important;color:var(--tx)}
+.app-add input{background:var(--surface);border:1px solid var(--border);color:var(--tx)}
+.app-add button{background:var(--ui);color:var(--tx)}
 /* controle remoto */
 #rd-search{background:var(--surface)!important;border:1px solid var(--border)!important;color:var(--tx)!important}
 #rdpad button,#rd-back{background:var(--ui);border:0;color:var(--tx);transition:background .15s var(--ease)}
@@ -1328,6 +1530,11 @@ body[data-profile=nintendo] #face .face-guide{color:#c94747}
   </div>
 
   <div class="view" id=v-apps>
+    <form id=appadd class=app-add>
+      <input id=appname placeholder="Nome" autocomplete=off>
+      <input id=appurl placeholder="https://..." inputmode=url autocomplete=url>
+      <button>Adicionar atalho</button>
+    </form>
     <div id=apps></div>
   </div>
 
@@ -1350,8 +1557,8 @@ body[data-profile=nintendo] #face .face-guide{color:#c94747}
   <div class="p" id=mid><button id=tomenu>☰</button><button data-b=select>VIEW</button><span id=pnum>P1</span><button data-b=start>MENU</button><button id=turbo>TURBO</button></div>
   <div id=dpad><div></div><button data-b=up>▲</button><div></div><button data-b=left>◀</button><div></div><button data-b=right>▶</button><div></div><button data-b=down>▼</button><div></div></div>
   <div class="p" id=face><div></div><button data-b=y>Y</button><div></div><button data-b=x>X</button><div class=face-guide>XB</div><button data-b=b>B</button><div></div><button data-b=a>A</button><div></div></div>
-  <div class="p" id=ls><div class=knob id=lk></div><span class=lbl>LS</span></div>
-  <div class="p" id=rs><div class=knob id=rk></div><span class=lbl>RS</span></div>
+  <div class="p" id=ls><div class=knob id=lk></div><button class=lbl data-b=l3>LS</button></div>
+  <div class="p" id=rs><div class=knob id=rk></div><button class=lbl data-b=r3>RS</button></div>
   <button id=swapd title="trocar d-pad / analógico">⇄</button>
 
   <div id=mediactl>
@@ -1753,15 +1960,50 @@ function openSearchDetail(kind,r){
   const action=r.have
     ?'<button class=dt-play style="opacity:.6" disabled>✓ já está na biblioteca</button>'
     :`<button class=dt-play onclick='closeDetail();reqItem(${JSON.stringify(kind)},${JSON.stringify(r)})'>⬇ Baixar</button>`;
+  const streamBtn = (kind==='movie' && !r.have)
+    ? `<button class=dt-play style="margin-left:8px" onclick='pickStream(${JSON.stringify(r)})'>▶ Assistir agora</button>`
+    : '';
   document.getElementById('dt-body').innerHTML=`
     <div class=dt-top>${posterImg}<div class=dt-head>
       <div class=dt-title>${kind==='music'?r.title:`${r.title} (${r.year||'?'})`}</div>
       <div class=dt-meta>${meta}</div>
       ${genres?`<div class=dt-gen>${genres}</div>`:''}
-      ${action}
+      ${action}${streamBtn}
     </div></div>
     ${r.overview?`<div class=dt-ov>${r.overview}</div>`:''}`;
   ov.classList.add('on'); ov.scrollTop=0;
+}
+
+// ---------- streaming direto (tipo Stremio): busca magnet no Prowlarr,
+// escolhe a melhor opcao e toca no mpv sem esperar o download terminar ----------
+async function pickStream(r){
+  const ov=document.getElementById('detail');
+  document.getElementById('dt-hero').style.backgroundImage='';
+  document.getElementById('dt-body').innerHTML='<div style="padding:40px;text-align:center;opacity:.5">buscando fontes…</div>';
+  ov.classList.add('on'); ov.scrollTop=0;
+  const term=`${r.title} ${r.year||''}`.trim();
+  const opts=await fetch('/api/search-stream?q='+encodeURIComponent(term)).then(x=>x.json()).catch(()=>[]);
+  if(!opts.length){
+    document.getElementById('dt-body').innerHTML='<div style="padding:40px;text-align:center;opacity:.5">nenhuma fonte encontrada</div>';
+    return;
+  }
+  const gb=n=>n?(n/1e9).toFixed(1)+' GB':'?';
+  document.getElementById('dt-body').innerHTML=`
+    <div class=dt-sec>Escolha a fonte — ${r.title}</div>
+    <div id=streampicks>${opts.map((o,i)=>`
+      <div class=ep onclick='startStream(${JSON.stringify(o.link)},${JSON.stringify(r.poster||null)})'>
+        <div>${o.title}</div>
+        <div style="opacity:.5;font-size:.85em">${gb(o.size)} · ${o.seeders} seeders · ${o.indexer||''}</div>
+      </div>`).join('')}</div>`;
+}
+
+async function startStream(link,cover){
+  document.getElementById('dt-body').innerHTML='<div style="padding:40px;text-align:center;opacity:.5">conectando torrent…</div>';
+  const res=await fetch('/api/stream',{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({link,cover})}).then(x=>x.json()).catch(()=>({ok:false}));
+  closeDetail();
+  if(res.ok){toast('▶ tocando na TV');setTimeout(refreshStatus,1500);showTab('pad');}
+  else toast('erro ao streamar: '+(res.error||'?'));
 }
 
 async function play(pathOrList, kind, cover){
@@ -1845,6 +2087,19 @@ async function loadApps(){
     el.appendChild(d);
   }
 }
+document.getElementById('appadd').onsubmit=async ev=>{
+  ev.preventDefault();
+  const label=document.getElementById('appname').value.trim();
+  const url=document.getElementById('appurl').value.trim();
+  if(!label || !url){toast('Nome e URL obrigatórios');return;}
+  const res=await fetch('/api/web-apps',{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({label,url,icon:'🌐',kiosk:true})});
+  if(!res.ok){toast('URL inválida');return;}
+  document.getElementById('appname').value='';
+  document.getElementById('appurl').value='';
+  toast('Atalho adicionado');
+  loadApps();
+};
 
 // ---------- status / mini-player ----------
 function applyPadProfile(s){
@@ -1959,11 +2214,11 @@ document.getElementById('swapd').addEventListener('click',()=>{document.body.tog
 for(const el of document.querySelectorAll('#pad button[data-b]')){
   if(el.closest('#dpad'))continue;
   const b=el.dataset.b; let ti=null;
-  const d=ev=>{ev.preventDefault();el.classList.add('on');buzz(FACE.has(b)?10:16);
+  const d=ev=>{ev.preventDefault();ev.stopPropagation();el.classList.add('on');buzz(FACE.has(b)?10:16);
     if(turbo&&FACE.has(b)){let on=true;post({btn:b,state:1});
       ti=setInterval(()=>{on=!on;post({btn:b,state:on?1:0});},46);}
     else post({btn:b,state:1});};
-  const u=ev=>{ev.preventDefault();el.classList.remove('on');
+  const u=ev=>{ev.preventDefault();ev.stopPropagation();el.classList.remove('on');
     if(ti){clearInterval(ti);ti=null;}post({btn:b,state:0});};
   el.addEventListener('touchstart',d,{passive:false});el.addEventListener('touchend',u,{passive:false});
   el.addEventListener('touchcancel',u,{passive:false});el.addEventListener('mousedown',d);el.addEventListener('mouseup',u);el.addEventListener('mouseleave',u);
@@ -2817,6 +3072,8 @@ class Handler(BaseHTTPRequestHandler):
                 return self._deny()
             return self._pad_ws()
         if path == "/home":
+            if UI_MODE == "svelte" and self._static("tv.html"):
+                return
             # tela da TV (kiosk local) -- nao passa pelo login do celular
             body = HOME_PAGE.encode()
             self.send_response(200)
@@ -2826,12 +3083,20 @@ class Handler(BaseHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(body)
             return
+        if UI_MODE == "svelte" and path.startswith("/assets/") and self._static(path):
+            return
         if not self._authed():
             # login form only at the root; everything else gets a clean 401
             if PASSWORD and (path == "/" or path == ""):
                 return self._login_page()
             return self._deny()
         if path == "/" or path == "":
+            if UI_MODE == "svelte":
+                extra = ([("Set-Cookie",
+                           f"oikos={TOKEN}; Path=/; Max-Age=31536000; SameSite=Lax")]
+                         if TOKEN else [])
+                if self._static("index.html", extra):
+                    return
             body = PAGE.encode()
             extra = ([("Set-Cookie",
                        f"oikos={TOKEN}; Path=/; Max-Age=31536000; SameSite=Lax")]
@@ -2862,7 +3127,7 @@ class Handler(BaseHTTPRequestHandler):
         elif path == "/api/hyprpad":
             self._json({"url": HYPRPAD, "up": hyprpad_up()})
         elif path == "/api/apps":
-            self._json(APPS)
+            self._json(list_apps())
         elif path == "/api/recent":
             self._json(list_recent())
         elif path == "/api/resume":
@@ -2912,6 +3177,13 @@ class Handler(BaseHTTPRequestHandler):
             term = qs.get("q", [""])[0]
             try:
                 self._json(search_music(term) if term else [])
+            except Exception:
+                self._json([])
+        elif path == "/api/search-stream":
+            qs = parse_qs(urlparse(self.path).query)
+            term = qs.get("q", [""])[0]
+            try:
+                self._json(search_stream(term) if term else [])
             except Exception:
                 self._json([])
         elif path == "/api/search-query":
@@ -3106,11 +3378,18 @@ class Handler(BaseHTTPRequestHandler):
                     self._json({"ok": False}, 400)
 
         elif path == "/api/app":
-            app = next((a for a in APPS if a["id"] == d.get("id")), None)
+            app = next((a for a in list_apps() if a["id"] == d.get("id")), None)
             if app:
                 subprocess.run(["stop-game"])
                 sway_exec(app["cmd"])
                 self._json({"ok": True})
+            else:
+                self._json({"ok": False}, 400)
+
+        elif path == "/api/web-apps":
+            app = add_web_app(d)
+            if app:
+                self._json({"ok": True, "app": app}, 201)
             else:
                 self._json({"ok": False}, 400)
 
@@ -3128,6 +3407,21 @@ class Handler(BaseHTTPRequestHandler):
                 self._json({"ok": True})
             else:
                 self._json({"ok": False}, 400)
+
+        elif path == "/api/stream":
+            link = d.get("link")
+            if not link:
+                self._json({"ok": False, "error": "sem link"}, 400)
+            else:
+                try:
+                    url = stream_magnet(link)
+                    subprocess.run(["stop-game"])
+                    STATE["cover"] = d.get("cover")
+                    STATE["mkind"] = "movie"
+                    sway_exec("play-video '" + url.replace("'", "'\\''") + "'")
+                    self._json({"ok": True})
+                except Exception as ex:
+                    self._json({"ok": False, "error": str(ex)[:160]}, 200)
 
         elif path == "/api/mpv":
             cmd = MPV_ACTIONS.get(d.get("action"))

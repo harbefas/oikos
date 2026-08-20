@@ -104,3 +104,13 @@ services:
     volumes:
       - ./config/navidrome:/data
       - /media/music:/music:ro   # Lidarr writes, Navidrome only reads
+
+  torrserver:
+    image: ghcr.io/yourok/torrserver:latest
+    container_name: torrserver
+    restart: unless-stopped
+    ports: ["8090:8090"]
+    volumes:
+      - ./config/torrserver:/opt/ts/config
+    # sem downloads pro /media: streaming ao vivo (cache so em /opt/ts/config),
+    # nao entra no fluxo de biblioteca do Radarr/Sonarr
