@@ -15,20 +15,6 @@
       rel="stylesheet"
     />
 
-    <script>
-      // Before first paint — the phone and the TV must agree on the theme.
-      ;(function () {
-        var h = parseInt(
-          new Intl.DateTimeFormat('en-US', {
-            timeZone: 'America/Sao_Paulo',
-            hour: 'numeric',
-            hour12: false,
-          }).format(new Date()),
-          10
-        )
-        document.documentElement.dataset.theme = h >= 6 && h < 18 ? 'light' : 'dark'
-      })()
-    </script>
   </head>
   <body>
     <div id="app"></div>

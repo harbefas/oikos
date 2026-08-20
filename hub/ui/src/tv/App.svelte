@@ -7,27 +7,125 @@
   import Hero from './Hero.svelte'
   import Clock from './Clock.svelte'
 
+  const CATS = [
+    { id: 'home', label: 'Início' },
+    { id: 'movies', label: 'Filmes' },
+    { id: 'series', label: 'Séries' },
+    { id: 'music', label: 'Música' },
+    { id: 'games', label: 'Jogos' },
+    { id: 'search', label: 'Busca' },
+    { id: 'downloads', label: 'Downloads' },
+    { id: 'apps', label: 'Apps' },
+  ]
+
   /* --- data ---------------------------------------------------------------
      Rows load in parallel and render as they land; a slow Jellyfin must not
      hold up the games row. */
+  let libraries = $state({ resume: [], recent: [], movies: [], series: [], games: [], albums: [], apps: [] })
   let sections = $state([])
   let loading = $state(true)
+  let screen = $state('home')
+  let nav = $state(0)
+  let sidebar = $state(false)
+  let searchText = $state('')
+  let searchTimer = 0
+  let downloadsTimer = 0
+  let detailOpen = $state(false)
+  let detailItem = $state(null)
+  let detailInfo = $state({})
+  let wallpaper = $state(false)
+  let wallpaperSrc = $state('/wallpaper')
+  let lastInput = Date.now()
+  let idleTimer = 0
+  const initialScreen = new URLSearchParams(location.search).get('screen') || 'home'
 
   async function load() {
-    const [resume, recent, movies, series, games, albums] = await Promise.all([
-      api.resume(), api.recent(), api.movies(), api.series(), api.games(), api.albums(),
+    const [resume, recent, movies, series, games, albums, apps] = await Promise.all([
+      api.resume(), api.recent(), api.movies(), api.series(), api.games(), api.albums(), api.apps(),
     ])
 
-    sections = [
-      { key: 'resume', title: 'Continuar assistindo', items: resume },
-      { key: 'recent', title: 'Adicionados recentemente', items: recent },
-      { key: 'movies', title: 'Filmes', items: movies },
-      { key: 'series', title: 'Séries', items: series },
-      { key: 'games', title: 'Jogos', items: games },
-      { key: 'albums', title: 'Música', items: albums, ratio: '1 / 1' },
-    ].filter((s) => s.items?.length)
-
+    libraries = { resume, recent, movies, series, games, albums, apps }
+    show(CATS.some((cat) => cat.id === initialScreen) ? initialScreen : 'home')
     loading = false
+  }
+
+  function homeSections() {
+    return [
+      { key: 'resume', title: 'Continuar assistindo', items: libraries.resume },
+      { key: 'recent', title: 'Adicionados recentemente', items: libraries.recent },
+      { key: 'movies', title: 'Filmes', items: libraries.movies },
+      { key: 'series', title: 'Séries', items: libraries.series },
+      { key: 'games', title: 'Jogos', items: libraries.games },
+      { key: 'albums', title: 'Música', items: libraries.albums, ratio: '1 / 1' },
+    ].filter((s) => s.items?.length)
+  }
+
+  function appItems() {
+    return libraries.apps.map((app) => ({
+      ...app,
+      name: app.label,
+      cover: null,
+      _app: true,
+    }))
+  }
+
+  function downloadItems(items) {
+    return items.map((d) => ({
+      ...d,
+      name: `${d.title} · ${d.percent ?? 0}%`,
+      cover: null,
+      _download: true,
+    }))
+  }
+
+  function show(id) {
+    screen = id
+    nav = Math.max(0, CATS.findIndex((c) => c.id === id))
+    row = 0
+    col = 0
+    if (id === 'home') sections = homeSections()
+    else if (id === 'movies') sections = [{ key: 'movies', title: 'Filmes', items: libraries.movies }]
+    else if (id === 'series') sections = [{ key: 'series', title: 'Séries', items: libraries.series }]
+    else if (id === 'music') sections = [{ key: 'music', title: 'Música', items: libraries.albums, ratio: '1 / 1' }]
+    else if (id === 'games') sections = [{ key: 'games', title: 'Jogos', items: libraries.games }]
+    else if (id === 'apps') sections = [{ key: 'apps', title: 'Apps', items: appItems(), ratio: '1 / 1' }]
+    else if (id === 'downloads') refreshDownloads()
+    else if (id === 'search') runSearch(searchText)
+  }
+
+  async function refreshDownloads() {
+    const items = await api.downloads()
+    sections = [{ key: 'downloads', title: 'Baixando agora', items: downloadItems(items), ratio: '16 / 9' }]
+  }
+
+  function resultItems(items, kind) {
+    return items.map((item) => ({
+      ...item,
+      name: kind === 'music' ? item.title : `${item.title} (${item.year || '?'})`,
+      cover: item.poster,
+      _searchKind: kind,
+    }))
+  }
+
+  async function runSearch(q) {
+    searchText = q
+    clearTimeout(searchTimer)
+    if (!q) {
+      sections = []
+      return
+    }
+    searchTimer = setTimeout(async () => {
+      const [movies, series, music] = await Promise.all([
+        api.searchMovies(q), api.searchSeries(q), api.searchMusic(q),
+      ])
+      sections = [
+        { key: 'search-movies', title: 'Filmes', items: resultItems(movies, 'movie') },
+        { key: 'search-series', title: 'Séries', items: resultItems(series, 'series') },
+        { key: 'search-music', title: 'Música', items: resultItems(music, 'music') },
+      ].filter((s) => s.items.length)
+      row = 0
+      col = 0
+    }, 250)
   }
 
   /* --- focus --------------------------------------------------------------- */
@@ -53,24 +151,103 @@
     }
   }
 
-  function select(item) {
+  async function openDetail(item) {
     if (!item) return
-    if (item.system) return api.launch({ system: item.system, path: item.path })
-    if (item.albums) {
-      // artist tile: play the first album straight through
-      const a = item.albums[0]
-      return api.play({ path: a.path, cover: a.cover, kind: 'music' })
+    if (item._download) return
+    if (item._app) return api.launchApp(item.id)
+    detailItem = item
+    detailInfo = { name: item.name, cover: item.cover, backdrop: item.backdrop, overview: item.overview ?? '' }
+    detailOpen = true
+    if (item._searchKind) {
+      detailInfo = {
+        name: item.name,
+        cover: item.cover,
+        backdrop: item.cover,
+        overview: item.overview ?? '',
+        genres: item.genres ?? [],
+        year: item.year,
+        runtime: item.runtime,
+        rating: item.rating,
+        have: item.have,
+      }
+      return
     }
-    return api.play({ path: item.path, cover: item.cover, kind: 'video' })
+    if (item.system) {
+      detailInfo = await api.gameDetail(item.name, item.system)
+      detailInfo = { ...detailInfo, cover: item.cover, backdrop: detailInfo.backdrop ?? item.hero ?? item.cover }
+      return
+    }
+    if (item.id) {
+      const info = await api.detail(item.id)
+      detailInfo = { ...info, cover: item.cover ?? info.cover, backdrop: info.backdrop ?? item.backdrop ?? item.cover }
+    }
+  }
+
+  function closeDetail() {
+    detailOpen = false
+    detailItem = null
+    detailInfo = {}
+  }
+
+  async function detailAction() {
+    const item = detailItem
+    if (!item) return
+    if (item._searchKind) {
+      if (!item.have) {
+        if (item._searchKind === 'movie') await api.requestMovie(item.tmdbId)
+        else if (item._searchKind === 'series') await api.requestSeries(item.tvdbId)
+        else await api.requestMusic(item.mbid)
+      }
+      closeDetail()
+      return
+    }
+    if (item.system) {
+      await api.launch({ system: item.system, path: item.path })
+    } else if (item.albums) {
+      const a = item.albums[0]
+      await api.play({ path: a.path, cover: a.cover, kind: 'music' })
+    } else if (detailInfo.type === 'Series' || (!item.path && item.id)) {
+      const eps = await api.episodes(item.id)
+      if (eps.length) await api.play({ paths: eps.map((ep) => ep.path), cover: item.cover, kind: 'video' })
+    } else {
+      await api.play({ path: item.path, cover: item.cover, kind: 'video' })
+    }
+    closeDetail()
   }
 
   function onkey(e) {
     const k = e.key
+    lastInput = Date.now()
+    if (wallpaper) {
+      wallpaper = false
+      e.preventDefault()
+      return
+    }
+    if (detailOpen) {
+      if (k === 'Enter') detailAction()
+      else if (k === 'Escape' || k === 'Backspace') closeDetail()
+      else return
+      e.preventDefault()
+      return
+    }
+    if (sidebar) {
+      if (k === 'ArrowUp') nav = Math.max(0, nav - 1)
+      else if (k === 'ArrowDown') nav = Math.min(CATS.length - 1, nav + 1)
+      else if (k === 'ArrowRight' || k === 'Escape') sidebar = false
+      else if (k === 'Enter') { show(CATS[nav].id); sidebar = false }
+      else return
+      e.preventDefault()
+      return
+    }
     if (k === 'ArrowUp') { move(-1, 0); e.preventDefault() }
     else if (k === 'ArrowDown') { move(1, 0); e.preventDefault() }
-    else if (k === 'ArrowLeft') { move(0, -1); e.preventDefault() }
+    else if (k === 'ArrowLeft') {
+      if (col === 0) sidebar = true
+      else move(0, -1)
+      e.preventDefault()
+    }
     else if (k === 'ArrowRight') { move(0, 1); e.preventDefault() }
-    else if (k === 'Enter') { select(current); e.preventDefault() }
+    else if (k === 'Enter') { openDetail(current); e.preventDefault() }
   }
 
   /* --- what the box is doing ----------------------------------------------
@@ -88,15 +265,39 @@
     st = await api.status()
   }
 
+  async function watchSearchQuery() {
+    const { q } = await api.searchQuery()
+    if (q === searchText) return
+    searchText = q
+    if (q && screen !== 'search') show('search')
+    else if (screen === 'search') runSearch(q)
+  }
+
+  async function checkIdle() {
+    const state = await api.idle()
+    if (state.idle && Date.now() - lastInput > 5 * 60 * 1000) {
+      wallpaperSrc = `/wallpaper?t=${Date.now()}`
+      wallpaper = true
+    }
+  }
+
   onMount(() => {
     load()
     tick()
     poll = setInterval(tick, 2000)
+    const searchPoll = setInterval(watchSearchQuery, 700)
+    downloadsTimer = setInterval(() => {
+      if (screen === 'downloads') refreshDownloads()
+    }, 3000)
+    idleTimer = setInterval(checkIdle, 15000)
     window.addEventListener('keydown', onkey)
+    return () => clearInterval(searchPoll)
   })
 
   onDestroy(() => {
     clearInterval(poll)
+    clearInterval(downloadsTimer)
+    clearInterval(idleTimer)
     window.removeEventListener('keydown', onkey)
   })
 </script>
@@ -122,13 +323,28 @@
   <main>
     <header><Clock /></header>
 
+    <aside class:open={sidebar}>
+        {#each CATS as cat, i (cat.id)}
+        <button class:active={screen === cat.id} class:focus={sidebar && nav === i} onclick={() => show(cat.id)}>
+          {cat.label}
+        </button>
+      {/each}
+    </aside>
+
     <div class="rows">
-      <Hero item={current} />
+      {#if screen === 'search'}
+        <div class="search-bar">
+          <span>{searchText || 'Digite no celular'}</span>
+          <i></i>
+        </div>
+      {:else}
+        <Hero item={current} />
+      {/if}
 
       {#if loading}
         <p class="hint">Carregando…</p>
       {:else if !sections.length}
-        <p class="hint">Nada na biblioteca ainda.</p>
+        <p class="hint">{screen === 'search' ? 'Nada encontrado.' : 'Nada aqui.'}</p>
       {:else}
         {#each sections as s, i (s.key)}
           <Shelf
@@ -136,12 +352,47 @@
             items={s.items}
             ratio={s.ratio ?? '2 / 3'}
             focus={i === row ? col : -1}
-            onselect={select}
+            onselect={openDetail}
           />
         {/each}
       {/if}
     </div>
   </main>
+{/if}
+
+{#if detailOpen}
+  <div class="detail">
+    <div
+      class="detail-bg"
+      style:background-image={detailInfo.backdrop || detailInfo.cover ? `url(${detailInfo.backdrop ?? detailInfo.cover})` : 'none'}
+    ></div>
+    <section>
+      <div class="poster" style:background-image={detailInfo.cover ? `url(${detailInfo.cover})` : 'none'}></div>
+      <div class="detail-text">
+        <h1>{detailInfo.name ?? detailItem?.name}</h1>
+        <p class="meta">
+          {[detailInfo.year, detailInfo.runtime ? `${detailInfo.runtime} min` : null, detailInfo.rating ? `★ ${detailInfo.rating}` : null, detailInfo.genres?.slice?.(0, 3).join(' · ')].filter(Boolean).join(' · ')}
+        </p>
+        {#if detailInfo.overview}<p class="overview">{detailInfo.overview}</p>{/if}
+        {#if detailInfo.shots?.length}
+          <div class="shots">
+            {#each detailInfo.shots.slice(0, 4) as shot}
+              <img src={shot} alt="" />
+            {/each}
+          </div>
+        {/if}
+        <button class="primary" onclick={detailAction}>
+          {detailItem?._searchKind ? (detailItem.have ? 'Na biblioteca' : 'Baixar') : 'Tocar'}
+        </button>
+      </div>
+    </section>
+  </div>
+{/if}
+
+{#if wallpaper}
+  <div class="wallpaper">
+    <img src={wallpaperSrc} alt="" />
+  </div>
 {/if}
 
 <style>
@@ -170,11 +421,75 @@
     pointer-events: none;
   }
 
+  aside {
+    position: absolute;
+    z-index: 8;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    width: 240px;
+    padding: 136px var(--space-24) var(--space-32);
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-8);
+    background: linear-gradient(90deg, var(--bg) 78%, transparent);
+    transform: translateX(-184px);
+    transition: transform var(--duration-settle) var(--ease-focus);
+  }
+
+  aside.open {
+    transform: translateX(0);
+  }
+
+  aside button {
+    min-height: 44px;
+    text-align: left;
+    background: none;
+    border: 0;
+    border-left: 2px solid transparent;
+    color: var(--tx-3);
+    font-family: var(--font-sans);
+    font-size: var(--font-size-xs);
+    padding: 0 var(--space-12);
+  }
+
+  aside button.active {
+    color: var(--tx);
+  }
+
+  aside button.focus {
+    color: var(--tx);
+    border-left-color: var(--accent);
+    background: var(--accent-muted);
+  }
+
   .rows {
     height: 100%;
     overflow-y: auto;
     scrollbar-width: none;
     padding: 132px 52px 52px;
+  }
+
+  .search-bar {
+    min-height: 30vh;
+    display: flex;
+    align-items: flex-end;
+    gap: var(--space-8);
+    padding: 0 4px 30px;
+    font-family: var(--font-serif);
+    font-size: var(--font-size-4xl);
+    color: var(--tx);
+  }
+
+  .search-bar i {
+    width: 2px;
+    height: 0.9em;
+    background: var(--accent);
+    animation: blink 1s steps(1) infinite;
+  }
+
+  @keyframes blink {
+    50% { opacity: 0; }
   }
 
   .rows::-webkit-scrollbar {
@@ -185,5 +500,124 @@
     color: var(--tx-3);
     font-size: 15px;
     padding: 8px 4px;
+  }
+
+  .detail {
+    position: fixed;
+    z-index: 20;
+    inset: 0;
+    display: flex;
+    align-items: flex-end;
+    background: var(--bg);
+  }
+
+  .detail-bg {
+    position: absolute;
+    inset: 0;
+    background: center / cover no-repeat;
+    filter: brightness(0.5);
+  }
+
+  .detail-bg::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background:
+      linear-gradient(0deg, var(--bg) 8%, transparent 68%),
+      linear-gradient(90deg, var(--bg) 0%, transparent 62%);
+  }
+
+  .detail section {
+    position: relative;
+    z-index: 1;
+    display: flex;
+    gap: var(--space-32);
+    width: min(1180px, calc(100vw - 104px));
+    padding: 0 52px 56px;
+  }
+
+  .poster {
+    flex: 0 0 230px;
+    aspect-ratio: 2 / 3;
+    border-radius: var(--radius-art);
+    border: 1px solid var(--border);
+    background: var(--surface) center / cover no-repeat;
+  }
+
+  .detail-text {
+    max-width: 720px;
+    align-self: flex-end;
+  }
+
+  .detail h1 {
+    font-family: var(--font-serif);
+    font-size: var(--font-size-4xl);
+    font-weight: 500;
+    line-height: var(--leading-tight);
+    color: var(--tx);
+  }
+
+  .meta {
+    margin-top: var(--space-12);
+    min-height: 1.2em;
+    color: var(--tx-3);
+    font-family: var(--font-sans);
+    font-size: var(--font-size-2xs);
+    letter-spacing: var(--tracking-eyebrow);
+    text-transform: uppercase;
+  }
+
+  .overview {
+    margin-top: var(--space-12);
+    color: var(--tx-2);
+    font-family: var(--font-serif);
+    font-size: var(--font-size-sm);
+    line-height: var(--leading-prose);
+    display: -webkit-box;
+    -webkit-line-clamp: 4;
+    line-clamp: 4;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+
+  .shots {
+    display: flex;
+    gap: var(--space-12);
+    margin-top: var(--space-16);
+  }
+
+  .shots img {
+    width: 180px;
+    aspect-ratio: 16 / 9;
+    object-fit: cover;
+    border-radius: var(--radius-md);
+    border: 1px solid var(--border);
+  }
+
+  .primary {
+    margin-top: var(--space-20);
+    min-width: 160px;
+    min-height: 48px;
+    border: 1px solid var(--accent);
+    border-radius: var(--radius-md);
+    background: var(--accent);
+    color: var(--bg);
+    font-family: var(--font-sans);
+    font-size: var(--font-size-xs);
+    font-weight: 600;
+  }
+
+  .wallpaper {
+    position: fixed;
+    z-index: 40;
+    inset: 0;
+    background: #000;
+  }
+
+  .wallpaper img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
   }
 </style>

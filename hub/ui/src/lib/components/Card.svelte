@@ -19,6 +19,7 @@
   const tilt = $derived(Math.max(-1, Math.min(1, -offset / 3)))
   const depth = $derived(-Math.min(Math.abs(offset), 4))
   const dim = $derived(Math.max(0.42, 1 - Math.abs(offset) * 0.13))
+  const fallback = $derived(item.icon ?? (item._download ? '📥' : item.system ? '🎮' : item.albums ? '🎵' : ''))
 </script>
 
 <button
@@ -34,14 +35,14 @@
   {#if item.cover}
     <img src={item.cover} alt="" loading="lazy" decoding="async" />
   {:else}
-    <span class="blank"></span>
+    <span class="blank">{fallback}</span>
   {/if}
 
   {#if item.system}
     <span class="badge">{item.system}</span>
   {/if}
 
-  <span class="name">{item.name}</span>
+  <span class="name" class:always={!item.cover}>{item.name}</span>
 </button>
 
 <style>
@@ -94,6 +95,10 @@
 
   .blank {
     background: var(--bg-2);
+    color: var(--tx-2);
+    font-size: clamp(36px, 6vw, 68px);
+    display: grid;
+    place-items: center;
   }
 
   /* Dense truncated label — Inter per §3 ("UI labels, dense data"), not the
@@ -117,6 +122,10 @@
   }
 
   .card.focused .name {
+    opacity: 1;
+  }
+
+  .name.always {
     opacity: 1;
   }
 

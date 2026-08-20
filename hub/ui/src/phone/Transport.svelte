@@ -12,6 +12,11 @@
     return `${m}:${String(Math.floor(s % 60)).padStart(2, '0')}`
   }
 
+  function delay(v) {
+    const n = Number(v ?? 0)
+    return `${n > 0 ? '+' : ''}${n.toFixed(1)}s`
+  }
+
   // prev/next only make sense in a playlist — a single film has neither.
   const actions = $derived(
     music
@@ -31,14 +36,17 @@
 </script>
 
 <div class="transport">
-  <div class="head">
+  <div class="hero">
     {#if now.cover}
       <img class="art" src={now.cover} alt="" />
+    {:else}
+      <span class="art blank">{music ? '🎵' : '🎬'}</span>
     {/if}
-    <div class="text">
-      <p class="title">{now.title ?? '—'}</p>
-      <p class="time">{clock(now.pos)} / {clock(now.duration)}</p>
-    </div>
+  </div>
+
+  <div class="text">
+    <p class="title">{now.title ?? '—'}</p>
+    <p class="time">{clock(now.pos)} / {clock(now.duration)}</p>
   </div>
 
   <div class="bar"><i style:width="{frac * 100}%"></i></div>
@@ -62,10 +70,25 @@
       <button onclick={() => api.mpv('audio')}>Áudio</button>
     {/if}
   </div>
+
+  {#if !music}
+    <div class="sync">
+      <span>Legenda</span>
+      <button onclick={() => api.mpv('subdelay-')}>−</button>
+      <button class="value" onclick={() => api.mpv('subdelay0')}>{delay(now.subdelay)}</button>
+      <button onclick={() => api.mpv('subdelay+')}>+</button>
+
+      <span>Áudio</span>
+      <button onclick={() => api.mpv('audiodelay-')}>−</button>
+      <button class="value" onclick={() => api.mpv('audiodelay0')}>{delay(now.audiodelay)}</button>
+      <button onclick={() => api.mpv('audiodelay+')}>+</button>
+    </div>
+  {/if}
 </div>
 
 <style>
   .transport {
+    height: 100%;
     background: var(--bg-2);
     border-top: 1px solid var(--border);
     padding: var(--space-12) var(--space-16);
@@ -74,30 +97,44 @@
     gap: var(--space-12);
   }
 
-  .head {
-    display: flex;
-    align-items: center;
-    gap: var(--space-12);
-    min-width: 0;
+  /* ocupa o espaco que sobrava vazio -- capa grande em vez de thumb 44px */
+  .hero {
+    flex: 1;
+    min-height: 0;
+    display: grid;
+    place-items: center;
+    padding: var(--space-8) 0;
   }
 
   .art {
-    width: 44px;
-    height: 44px;
+    width: auto;
+    height: 100%;
+    max-width: 100%;
+    max-height: min(52vh, 420px);
+    aspect-ratio: 1;
     object-fit: cover;
-    border-radius: var(--radius-sm);
+    border-radius: var(--radius-art);
     border: 1px solid var(--border);
-    flex: 0 0 auto;
+    box-shadow: var(--shadow-md);
+  }
+
+  .art.blank {
+    display: grid;
+    place-items: center;
+    background: var(--surface);
+    color: var(--tx-3);
+    font-size: 48px;
   }
 
   .text {
     min-width: 0;
+    text-align: center;
   }
 
   /* Track title is content, so the reading face (§3). */
   .title {
     font-family: var(--font-serif);
-    font-size: var(--font-size-sm);
+    font-size: var(--font-size-md);
     line-height: var(--leading-ui);
     color: var(--tx);
     white-space: nowrap;
@@ -163,5 +200,40 @@
     font-size: var(--font-size-2xs);
     min-height: 38px;
     color: var(--tx-2);
+  }
+
+  .sync {
+    display: grid;
+    grid-template-columns: minmax(58px, 0.95fr) repeat(3, minmax(38px, 1fr));
+    gap: var(--space-8);
+    align-items: center;
+  }
+
+  .sync span {
+    min-width: 0;
+    color: var(--tx-4);
+    font-family: var(--font-sans);
+    font-size: var(--font-size-2xs);
+    font-weight: 600;
+  }
+
+  .sync button {
+    min-height: 34px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: var(--surface);
+    color: var(--tx-2);
+    font-family: var(--font-mono);
+    font-size: var(--font-size-2xs);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .sync button:active {
+    border-color: var(--accent);
+    background: var(--accent-muted);
+  }
+
+  .sync .value {
+    color: var(--tx);
   }
 </style>

@@ -12,22 +12,6 @@
       rel="stylesheet"
     />
 
-    <script>
-      // Set before first paint so the kiosk never flashes the wrong theme.
-      // Same São Paulo rule as theme.js — duplicated deliberately, it has to
-      // run inline and cannot wait for the bundle.
-      ;(function () {
-        var h = parseInt(
-          new Intl.DateTimeFormat('en-US', {
-            timeZone: 'America/Sao_Paulo',
-            hour: 'numeric',
-            hour12: false,
-          }).format(new Date()),
-          10
-        )
-        document.documentElement.dataset.theme = h >= 6 && h < 18 ? 'light' : 'dark'
-      })()
-    </script>
   </head>
   <body>
     <div id="app"></div>

@@ -8,7 +8,7 @@ const api = process.env.OIKOS_DEV_API || 'http://homelab:8100'
 
 // Everything the Python hub owns. Anything not listed falls through to Vite,
 // which is what serves the UI itself in dev.
-const proxied = ['/api', '/jf', '/jfbd', '/acover', '/cover', '/img', '/wallpaper', '/steamhero']
+const proxied = ['/api', '/jf', '/jfbd', '/acover', '/cover', '/img', '/wallpaper', '/steamcover', '/steamhero']
 
 export default defineConfig({
   plugins: [svelte()],

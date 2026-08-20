@@ -1,14 +1,17 @@
 <script>
   let { items = [], ratio = '2 / 3', onselect = () => {} } = $props()
+
+  function fallback(e) {
+    e.currentTarget.remove()
+  }
 </script>
 
 <div class="grid">
   {#each items as item (item.id ?? item.path ?? item.name)}
     <button class="tile" style:aspect-ratio={ratio} onclick={() => onselect(item)}>
+      <span class="blank">{item.system ? '🎮' : item.albums ? '🎵' : '🎬'}</span>
       {#if item.cover}
-        <img src={item.cover} alt="" loading="lazy" decoding="async" />
-      {:else}
-        <span class="blank"></span>
+        <img src={item.cover} alt="" loading="lazy" decoding="async" onerror={fallback} />
       {/if}
       <span class="name">{item.name ?? item.label}</span>
     </button>
@@ -18,7 +21,7 @@
 <style>
   .grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(112px, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(105px, 1fr));
     gap: var(--space-12);
   }
 
@@ -42,6 +45,7 @@
 
   img,
   .blank {
+    grid-area: 1 / 1;
     width: 100%;
     height: 100%;
     object-fit: cover;
@@ -50,6 +54,10 @@
 
   .blank {
     background: var(--bg-2);
+    color: var(--tx-3);
+    display: grid;
+    place-items: center;
+    font-size: 34px;
   }
 
   /* Scrim over artwork — permitted under §6a, and required: a title over a
