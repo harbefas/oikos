@@ -1,9 +1,9 @@
 // Thin wrapper over the Python hub. Every endpoint here already exists in
 // console-hub.py; nothing new is invented on the client.
 
-async function get(path) {
+async function get(path, timeoutMs = 3500) {
   const ctrl = new AbortController()
-  const timeout = setTimeout(() => ctrl.abort(), 3500)
+  const timeout = setTimeout(() => ctrl.abort(), timeoutMs)
   try {
     const r = await fetch(path, { credentials: 'same-origin', signal: ctrl.signal })
     if (!r.ok) throw new Error(`${path} -> ${r.status}`)
@@ -26,7 +26,7 @@ async function post(path, body) {
 
 // Reads. Each returns [] rather than throwing so one dead upstream (Radarr
 // down, Jellyfin restarting) degrades a single row instead of the whole screen.
-const safe = (p, fallback) => get(p).catch(() => fallback)
+const safe = (p, fallback, timeoutMs) => get(p, timeoutMs).catch(() => fallback)
 
 export const games = () => safe('/api/games', [])
 export const movies = () => safe('/api/movies', [])
@@ -48,9 +48,11 @@ export const searchQuery = () => safe('/api/search-query', { q: '' })
 export const searchMovies = (q) => safe(`/api/search?q=${encodeURIComponent(q)}`, [])
 export const searchSeries = (q) => safe(`/api/search-series?q=${encodeURIComponent(q)}`, [])
 export const searchMusic = (q) => safe(`/api/search-music?q=${encodeURIComponent(q)}`, [])
-// kind: 'movie' | 'series' -- decide a categoria de indexer no Prowlarr
+// kind: 'movie' | 'series' -- decide a categoria de indexer no Prowlarr.
+// Prowlarr consulta varios indexers de uma vez -- 6-16s e normal, o timeout
+// padrao de 3.5s (bom pros outros endpoints) matava essa busca sempre.
 export const searchStream = (q, kind) =>
-  safe(`/api/search-stream?kind=${kind}&q=${encodeURIComponent(q)}`, [])
+  safe(`/api/search-stream?kind=${kind}&q=${encodeURIComponent(q)}`, [], 30000)
 
 export const gameDetail = (name, system) =>
   safe(

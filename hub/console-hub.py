@@ -8,7 +8,7 @@ Estende o padserver. Alem de servir os gamepads virtuais (uinput), oferece:
 
 Lanca via `swaymsg exec` na sessao Sway. Sem app no celular.
 """
-import base64, hashlib, json, os, re, shlex, socket, struct, subprocess, time, urllib.parse, urllib.request, zlib
+import base64, hashlib, json, os, re, shlex, socket, struct, subprocess, threading, time, urllib.parse, urllib.request, zlib
 from datetime import datetime
 from urllib.parse import urlparse, parse_qs
 
@@ -77,6 +77,20 @@ def mpv_cmd(command):
     except Exception:
         pass
     return None
+
+
+def show_loading_osd(msg, tries=20, gap=0.3):
+    """Manda uma mensagem de OSD (texto por cima do preto do mpv, antes do
+    1o frame decodificar) assim que o socket IPC aceitar conexao -- mpv leva
+    um instante pra criar o socket depois de abrir, entao tenta algumas
+    vezes. show-text some sozinho depois de 15s (duracao fixa, nao sabe
+    quando o video de fato comecou -- so ameniza o vazio, nao elimina)."""
+    def _try():
+        for _ in range(tries):
+            if mpv_cmd(["show-text", msg, 15000]) is not None:
+                return
+            time.sleep(gap)
+    threading.Thread(target=_try, daemon=True).start()
 
 
 def mpv_now_playing():
@@ -2125,7 +2139,7 @@ async function pickStream(r,season,episode){
 }
 
 function showSourceList(r,opts,season,episode){
-  const extra = season!=null ? {imdbId:r.imdbId,season,episode} : {imdbId:r.imdbId};
+  const extra = season!=null ? {imdbId:r.imdbId,season,episode,title:r.title} : {imdbId:r.imdbId,title:r.title};
   document.getElementById('dt-body').innerHTML=`
     <div class=dt-sec>Escolha a fonte — ${r.title}</div>
     <div id=streampicks>${opts.map(o=>`
@@ -3571,6 +3585,8 @@ class Handler(BaseHTTPRequestHandler):
                     if sub:
                         cmd += " --sub-file='" + sub.replace("'", "'\\''") + "'"
                     sway_exec(cmd)
+                    if d.get("title"):
+                        show_loading_osd(f"▶ {d['title']}\nCarregando...")
                     self._json({"ok": True, "subtitle": bool(sub)})
                 except Exception as ex:
                     self._json({"ok": False, "error": str(ex)[:160]}, 200)

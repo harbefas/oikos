@@ -57,21 +57,21 @@
     } catch (_) {
       msg = 'Erro ao pedir.'
     }
+    detailItem = null
   }
+
+  // null | { item, kind }
+  let detailItem = $state(null)
 
   // ---------- streaming direto (tipo Stremio): busca magnet no Prowlarr,
-  // toca a melhor fonte no mpv sem esperar o download terminar ----------
-  const BAD_SRC = /\bcam\b|\bts\b|\bhdcam\b|\btelesync\b/i
-  const bestSource = (opts) => {
-    const good = opts.filter((o) => !BAD_SRC.test(o.title))
-    return (good.length ? good : opts)[0]
-  }
+  // mostra as fontes (ja ordenadas por seeders) pra escolher qual tocar ----------
   const pad2 = (n) => String(n).padStart(2, '0')
 
-  // null | { item, phase: 'episode'|'searching'|'empty'|'sources', season, episode, opts }
+  // null | { item, phase: 'episode'|'searching'|'empty'|'sources'|'connecting', season, episode, opts }
   let streamPick = $state(null)
 
   function openStream(item, kind) {
+    detailItem = null
     streamPick = kind === 'series'
       ? { item, kind, phase: 'episode', season: 1, episode: 1, opts: [] }
       : { item, kind, phase: 'searching', season: null, episode: null, opts: [] }
@@ -87,21 +87,16 @@
       : `${item.title} ${item.year || ''}`.trim()
     const opts = await api.searchStream(term, kind)
     if (!streamPick) return
-    if (!opts.length) {
-      streamPick = { ...streamPick, phase: 'empty' }
-      return
-    }
-    streamPick = { ...streamPick, phase: 'sources', opts }
-    startStream(bestSource(opts))
+    streamPick = { ...streamPick, phase: opts.length ? 'sources' : 'empty', opts }
   }
 
   async function startStream(source) {
     if (!streamPick) return
     const { item, kind, season, episode } = streamPick
-    msg = '▶ conectando torrent...'
+    streamPick = { ...streamPick, phase: 'connecting', sourceTitle: source.title }
     const extra = kind === 'series'
-      ? { imdbId: item.imdbId, season, episode }
-      : { imdbId: item.imdbId }
+      ? { imdbId: item.imdbId, season, episode, title: item.title }
+      : { imdbId: item.imdbId, title: item.title }
     try {
       const res = await api.stream({ link: source.link, cover: item.poster, ...extra })
       streamPick = null
@@ -143,24 +138,46 @@
     <h2>{group.title}</h2>
     <div class="grid">
       {#each group.items as item (`${group.kind}-${item.tmdbId ?? item.tvdbId ?? item.mbid ?? item.title}`)}
-        <div class="tile">
-          <button class="tile-main" onclick={() => request(item, group.kind)}>
-            {#if item.poster}
-              <img src={item.poster} alt="" loading="lazy" decoding="async" />
-            {:else}
-              <span class="blank"></span>
-            {/if}
-            <span class="name">{title(item, group.kind)}</span>
-            <span class:have={item.have}>{item.have ? 'Na biblioteca' : '+ baixar'}</span>
-          </button>
-          {#if !item.have && (group.kind === 'movie' || group.kind === 'series')}
-            <button class="stream" onclick={() => openStream(item, group.kind)} title="Assistir agora">▶</button>
+        <button class="tile" onclick={() => (detailItem = { item, kind: group.kind })}>
+          {#if item.poster}
+            <img src={item.poster} alt="" loading="lazy" decoding="async" />
+          {:else}
+            <span class="blank"></span>
           {/if}
-        </div>
+          <span class="name">{title(item, group.kind)}</span>
+          <span class:have={item.have}>{item.have ? 'Na biblioteca' : '+ baixar'}</span>
+        </button>
       {/each}
     </div>
   </section>
 {/each}
+
+{#if detailItem}
+  {@const { item, kind } = detailItem}
+  <div class="stream-ov">
+    <button class="close" onclick={() => (detailItem = null)} aria-label="Fechar">×</button>
+    {#if item.poster}
+      <div class="detail-backdrop" style:background-image={`url(${item.poster})`}></div>
+    {/if}
+    <h2>{title(item, kind)}</h2>
+    {#if item.genres?.length || item.rating || item.runtime}
+      <p class="detail-meta">
+        {[item.rating ? `★ ${item.rating}` : null, item.runtime ? `${item.runtime} min` : null, item.genres?.slice(0, 3).join(' · ')].filter(Boolean).join(' · ')}
+      </p>
+    {/if}
+    {#if item.overview}<p class="detail-overview">{item.overview}</p>{/if}
+    <div class="detail-actions">
+      {#if item.have}
+        <button class="primary" disabled>Já está na biblioteca</button>
+      {:else}
+        <button class="primary" onclick={() => request(item, kind)}>⬇ Baixar</button>
+        {#if kind === 'movie' || kind === 'series'}
+          <button class="primary ghost" onclick={() => openStream(item, kind)}>▶ Assistir agora</button>
+        {/if}
+      {/if}
+    </div>
+  </div>
+{/if}
 
 {#if streamPick}
   <div class="stream-ov">
@@ -174,11 +191,11 @@
         <button class="primary" onclick={runStreamSearch}>Buscar</button>
       </div>
     {:else if streamPick.phase === 'searching'}
-      <p class="hint">Buscando fontes...</p>
+      <div class="loading"><span class="spinner"></span><p class="hint">Buscando fontes...</p></div>
     {:else if streamPick.phase === 'empty'}
       <p class="hint">Nenhuma fonte encontrada.</p>
     {:else if streamPick.phase === 'sources'}
-      <p class="hint">Conectando na melhor fonte -- toque outra pra trocar</p>
+      <p class="hint">Escolha uma fonte</p>
       <div class="sources">
         {#each streamPick.opts as o}
           <button class="source" onclick={() => startStream(o)}>
@@ -186,6 +203,12 @@
             <span class="smeta">{gb(o.size)} · {o.seeders} seeders · {o.indexer || ''}</span>
           </button>
         {/each}
+      </div>
+    {:else if streamPick.phase === 'connecting'}
+      <div class="loading">
+        <span class="spinner"></span>
+        <p class="hint">Conectando torrent...</p>
+        <p class="hint dim">{streamPick.sourceTitle}</p>
       </div>
     {/if}
   </div>
@@ -247,46 +270,15 @@
   .tile {
     position: relative;
     aspect-ratio: 2 / 3;
+    padding: 0;
+    border: 1px solid var(--border);
     border-radius: var(--radius-art);
     overflow: hidden;
     background: var(--surface);
     color: var(--tx);
   }
 
-  .tile-main {
-    display: block;
-    width: 100%;
-    height: 100%;
-    padding: 0;
-    border: 1px solid var(--border);
-    border-radius: var(--radius-art);
-    overflow: hidden;
-    background: none;
-    color: var(--tx);
-  }
-
-  .tile-main:active {
-    border-color: var(--accent);
-  }
-
-  .tile .stream {
-    position: absolute;
-    z-index: 1;
-    bottom: var(--space-8);
-    left: var(--space-8);
-    width: 32px;
-    height: 32px;
-    border-radius: 999px;
-    border: 1px solid var(--border);
-    background: color-mix(in srgb, var(--surface) 80%, transparent);
-    color: var(--tx);
-    font-size: 13px;
-    line-height: 1;
-  }
-
-  .tile .stream:active {
-    background: var(--accent);
-    color: var(--bg);
+  .tile:active {
     border-color: var(--accent);
   }
 
@@ -314,7 +306,7 @@
     background: linear-gradient(transparent, var(--nm-grad) 60%);
   }
 
-  .tile-main > span:last-child {
+  .tile > span:last-child {
     position: absolute;
     top: var(--space-8);
     right: var(--space-8);
@@ -325,7 +317,7 @@
     border-radius: var(--radius-sm);
   }
 
-  .tile-main > span.have {
+  .tile > span.have {
     background: var(--bg-3);
     color: var(--tx-2);
     border: 1px solid var(--border);
@@ -362,6 +354,84 @@
     font-weight: 500;
     margin: 0 0 var(--space-16);
     padding-right: 44px;
+  }
+
+  .detail-backdrop {
+    aspect-ratio: 2 / 3;
+    max-width: 200px;
+    margin-bottom: var(--space-16);
+    border-radius: var(--radius-art);
+    border: 1px solid var(--border);
+    background: var(--surface) center / cover no-repeat;
+  }
+
+  .detail-meta {
+    margin: calc(-1 * var(--space-8)) 0 var(--space-12);
+    color: var(--tx-3);
+    font-family: var(--font-sans);
+    font-size: var(--font-size-2xs);
+    letter-spacing: var(--tracking-eyebrow);
+    text-transform: uppercase;
+  }
+
+  .detail-overview {
+    margin: 0 0 var(--space-20);
+    color: var(--tx-2);
+    font-size: var(--font-size-sm);
+    line-height: var(--leading-prose);
+  }
+
+  .detail-actions {
+    display: grid;
+    gap: var(--space-8);
+  }
+
+  .detail-actions .primary {
+    min-height: 48px;
+    border: 1px solid var(--accent);
+    border-radius: var(--radius-md);
+    background: var(--accent);
+    color: var(--bg);
+    font-family: var(--font-sans);
+    font-size: var(--font-size-xs);
+    font-weight: 700;
+  }
+
+  .detail-actions .primary:disabled {
+    opacity: 0.6;
+  }
+
+  .detail-actions .primary.ghost {
+    background: none;
+    color: var(--tx);
+  }
+
+  .loading {
+    display: grid;
+    justify-items: center;
+    gap: var(--space-12);
+    padding: var(--space-32) 0;
+    text-align: center;
+  }
+
+  .hint.dim {
+    opacity: 0.6;
+    font-size: var(--font-size-2xs);
+  }
+
+  .spinner {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    border: 3px solid var(--border);
+    border-top-color: var(--accent);
+    animation: spin 0.8s linear infinite;
+  }
+
+  @keyframes spin {
+    to {
+      transform: rotate(360deg);
+    }
   }
 
   .epform {
