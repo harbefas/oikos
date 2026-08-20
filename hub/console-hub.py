@@ -894,6 +894,28 @@ def request_series(tvdb_id):
     return sonarr("/series", body)
 
 
+def ensure_sonarr_entry(tvdb_id):
+    """Cadastra a serie no Sonarr sem monitorar/baixar nada -- so pra existir
+    na base e o Bazarr conseguir achar episodio pra buscar legenda, igual
+    ensure_radarr_entry faz pra filme."""
+    hits = sonarr(f"/series/lookup?term=tvdb:{tvdb_id}")
+    m = hits[0]
+    existing = sonarr(f"/series?tvdbId={tvdb_id}")
+    if existing:
+        return existing[0]["id"]
+    qp = _prof1080(sonarr("/qualityprofile"))
+    seasons = [{"seasonNumber": s["seasonNumber"], "monitored": False}
+               for s in m.get("seasons", [])]
+    body = {
+        "title": m["title"], "tvdbId": m["tvdbId"], "titleSlug": m["titleSlug"],
+        "images": m.get("images", []), "seasons": seasons,
+        "qualityProfileId": qp, "rootFolderPath": sonarr("/rootfolder")[0]["path"],
+        "monitored": False, "seasonFolder": True,
+        "addOptions": {"searchForMissingEpisodes": False, "monitor": "none"},
+    }
+    return sonarr("/series", body)["id"]
+
+
 LIDARR = "http://localhost:8686/api/v1"
 try:
     LIDARR_KEY = os.environ.get("OIKOS_LIDARR_KEY", "").strip()
@@ -1014,6 +1036,36 @@ def fetch_subtitle_bazarr(tmdb_id):
     return None
 
 
+def fetch_subtitle_bazarr_episode(tvdb_id, season, episode):
+    """Mesma ideia de fetch_subtitle_bazarr, pro episodio de uma serie:
+    cadastra a serie sem baixar, acha o episodeId no Sonarr e pede legenda
+    pt-BR pro Bazarr por esse episodio."""
+    sid = ensure_sonarr_entry(tvdb_id)
+    time.sleep(3)
+    eps = sonarr(f"/episode?seriesId={sid}")
+    ep = next((e for e in eps if e["seasonNumber"] == season
+               and e["episodeNumber"] == episode), None)
+    if not ep:
+        return None
+    eid = ep["id"]
+    hits = bazarr_req(f"/providers/episodes?episodeid={eid}&language=pt-BR")
+    cands = hits.get("data") if isinstance(hits, dict) else hits
+    if not cands:
+        return None
+    pick = cands[0]
+    bazarr_req("/subtitles", {
+        "seriesid": sid, "episodeid": eid, "language": "pt-BR",
+        "hi": "false", "forced": "false",
+        "provider": pick.get("provider"), "subtitle": pick.get("subtitle"),
+    })
+    row = bazarr_req(f"/episodes?episodeid[]={eid}")
+    rows = row.get("data") if isinstance(row, dict) else row
+    for sub in (rows[0].get("subtitles") or []) if rows else []:
+        if sub.get("path") and "pt" in (sub.get("code2") or "").lower():
+            return sub["path"]
+    return None
+
+
 def prowlarr(path):
     r = urllib.request.Request(PROWLARR + path,
         headers={"X-Api-Key": PROWLARR_KEY})
@@ -1021,11 +1073,12 @@ def prowlarr(path):
     return json.loads(b) if b else None
 
 
-def search_stream(term):
+def search_stream(term, categories=2000):
     """Busca magnet em todos os indexers do Prowlarr -- pra assistir na hora
-    (tipo Stremio), sem esperar o Radarr baixar o filme inteiro primeiro."""
+    (tipo Stremio), sem esperar Radarr/Sonarr baixar o arquivo inteiro
+    primeiro. categories=2000 filme, 5000 tv/episodio."""
     hits = prowlarr("/search?query=" + urllib.parse.quote(term) +
-                     "&type=search&categories=2000")
+                     f"&type=search&categories={categories}")
     out = []
     for h in hits:
         link = h.get("magnetUrl") or h.get("downloadUrl")
@@ -2046,6 +2099,8 @@ function openSearchDetail(kind,r){
     :`<button class=dt-play onclick='closeDetail();reqItem(${JSON.stringify(kind)},${JSON.stringify(r)})'>⬇ Baixar</button>`;
   const streamBtn = (kind==='movie' && !r.have)
     ? `<button class=dt-play style="margin-left:8px" onclick='pickStream(${JSON.stringify(r)})'>▶ Assistir agora</button>`
+    : (kind==='series' && !r.have)
+    ? `<button class=dt-play style="margin-left:8px" onclick='showEpisodePicker(${JSON.stringify(r)})'>▶ Assistir agora</button>`
     : '';
   document.getElementById('dt-body').innerHTML=`
     <div class=dt-top>${posterImg}<div class=dt-head>
@@ -2054,7 +2109,8 @@ function openSearchDetail(kind,r){
       ${genres?`<div class=dt-gen>${genres}</div>`:''}
       ${action}${streamBtn}
     </div></div>
-    ${r.overview?`<div class=dt-ov>${r.overview}</div>`:''}`;
+    ${r.overview?`<div class=dt-ov>${r.overview}</div>`:''}
+    <div id=epstream></div>`;
   ov.classList.add('on'); ov.scrollTop=0;
 }
 
@@ -2069,35 +2125,50 @@ function bestSource(opts){
   return (good.length?good:opts)[0];
 }
 
-async function pickStream(r){
+function showEpisodePicker(r){
+  document.getElementById('epstream').innerHTML=`
+    <div class=dt-sec>Qual episódio?</div>
+    <div style="display:flex;gap:8px;align-items:center;padding:0 4px 12px">
+      <label style="opacity:.6;font-size:.85em">Temp.<input id=epS type=number min=1 value=1 style="width:52px;margin-left:4px"></label>
+      <label style="opacity:.6;font-size:.85em">Ep.<input id=epE type=number min=1 value=1 style="width:52px;margin-left:4px"></label>
+      <button class=dt-play onclick='pickStream(${JSON.stringify(r)},+document.getElementById("epS").value,+document.getElementById("epE").value)'>Buscar</button>
+    </div>`;
+}
+
+async function pickStream(r,season,episode){
   const ov=document.getElementById('detail');
   document.getElementById('dt-hero').style.backgroundImage='';
   document.getElementById('dt-body').innerHTML='<div style="padding:40px;text-align:center;opacity:.5">buscando fontes…</div>';
   ov.classList.add('on'); ov.scrollTop=0;
-  const term=`${r.title} ${r.year||''}`.trim();
-  const opts=await fetch('/api/search-stream?q='+encodeURIComponent(term)).then(x=>x.json()).catch(()=>[]);
+  const pad=n=>String(n).padStart(2,'0');
+  const term = (season!=null)
+    ? `${r.title} S${pad(season)}E${pad(episode)}`
+    : `${r.title} ${r.year||''}`.trim();
+  const kind = season!=null ? 'series' : 'movie';
+  const opts=await fetch(`/api/search-stream?kind=${kind}&q=`+encodeURIComponent(term)).then(x=>x.json()).catch(()=>[]);
   if(!opts.length){
     document.getElementById('dt-body').innerHTML='<div style="padding:40px;text-align:center;opacity:.5">nenhuma fonte encontrada</div>';
     return;
   }
-  showSourceList(r,opts,true);
+  showSourceList(r,opts,true,season,episode);
 }
 
-function showSourceList(r,opts,auto){
+function showSourceList(r,opts,auto,season,episode){
+  const extra = season!=null ? {tvdbId:r.tvdbId,season,episode} : {tmdbId:r.tmdbId};
   document.getElementById('dt-body').innerHTML=`
     <div class=dt-sec>${auto?'Conectando na melhor fonte — ':'Escolha a fonte — '}${r.title}</div>
     <div id=streampicks>${opts.map(o=>`
-      <div class=ep onclick='startStream(${JSON.stringify(o.link)},${JSON.stringify(r.poster||null)},${JSON.stringify(r.tmdbId||null)})'>
+      <div class=ep onclick='startStream(${JSON.stringify(o.link)},${JSON.stringify(r.poster||null)},${JSON.stringify(extra)})'>
         <div>${o.title}</div>
         <div style="opacity:.5;font-size:.85em">${gb(o.size)} · ${o.seeders} seeders · ${o.indexer||''}</div>
       </div>`).join('')}</div>`;
-  if(auto) startStream(bestSource(opts).link, r.poster||null, r.tmdbId||null);
+  if(auto) startStream(bestSource(opts).link, r.poster||null, extra);
 }
 
-async function startStream(link,cover,tmdbId){
+async function startStream(link,cover,extra){
   toast('▶ conectando torrent…');
   const res=await fetch('/api/stream',{method:'POST',headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({link,cover,tmdbId})}).then(x=>x.json()).catch(()=>({ok:false}));
+    body:JSON.stringify({link,cover,...extra})}).then(x=>x.json()).catch(()=>({ok:false}));
   closeDetail();
   if(res.ok){toast(res.subtitle?'▶ tocando com legenda':'▶ tocando (sem legenda)');setTimeout(refreshStatus,1500);showTab('pad');}
   else toast('erro ao streamar: '+(res.error||'?'));
@@ -3279,8 +3350,9 @@ class Handler(BaseHTTPRequestHandler):
         elif path == "/api/search-stream":
             qs = parse_qs(urlparse(self.path).query)
             term = qs.get("q", [""])[0]
+            cats = 5000 if qs.get("kind", [""])[0] == "series" else 2000
             try:
-                self._json(search_stream(term) if term else [])
+                self._json(search_stream(term, cats) if term else [])
             except Exception:
                 self._json([])
         elif path == "/api/search-query":
@@ -3513,11 +3585,14 @@ class Handler(BaseHTTPRequestHandler):
                 try:
                     url, torrent_sub = stream_magnet(link)
                     sub_path = None
-                    if d.get("tmdbId"):
-                        try:
+                    try:
+                        if d.get("tvdbId") and d.get("season") is not None and d.get("episode") is not None:
+                            sub_path = fetch_subtitle_bazarr_episode(
+                                d["tvdbId"], int(d["season"]), int(d["episode"]))
+                        elif d.get("tmdbId"):
                             sub_path = fetch_subtitle_bazarr(d["tmdbId"])
-                        except Exception as ex:
-                            print(f"[stream] legenda via bazarr falhou: {ex}")
+                    except Exception as ex:
+                        print(f"[stream] legenda via bazarr falhou: {ex}")
                     sub = sub_path or torrent_sub
                     subprocess.run(["stop-game"])
                     STATE["cover"] = d.get("cover")
