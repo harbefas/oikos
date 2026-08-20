@@ -675,10 +675,11 @@ def jf_get(path):
 
 
 def list_movies():
-    d = jf_get("/Items?IncludeItemTypes=Movie&Recursive=true&SortBy=SortName&Fields=Path")
+    d = jf_get("/Items?IncludeItemTypes=Movie&Recursive=true&SortBy=SortName&Fields=Path,Genres")
     # backdrop is the wide art the TV's ambient layer crossfades between; the
     # poster is the fallback when an item has none (28 of 29 do have one).
     return [{"name": m["Name"], "path": m.get("Path"), "id": m["Id"],
+             "genre": (m.get("Genres") or ["Outros"])[0],
              "cover": f"/jf/{m['Id']}" if "Primary" in m.get("ImageTags", {}) else None,
              "backdrop": f"/jfbd/{m['Id']}" if m.get("BackdropImageTags") else None}
             for m in d["Items"] if m.get("Path")]
@@ -706,8 +707,9 @@ def detail(iid):
 
 
 def list_series():
-    d = jf_get("/Items?IncludeItemTypes=Series&Recursive=true&SortBy=SortName")
+    d = jf_get("/Items?IncludeItemTypes=Series&Recursive=true&SortBy=SortName&Fields=Genres")
     return [{"name": s["Name"], "id": s["Id"],
+             "genre": (s.get("Genres") or ["Outros"])[0],
              "cover": f"/jf/{s['Id']}" if "Primary" in s.get("ImageTags", {}) else None,
              "backdrop": f"/jfbd/{s['Id']}" if s.get("BackdropImageTags") else None}
             for s in d["Items"]]
@@ -1909,8 +1911,10 @@ async function doSearch(kind,q){
   el.innerHTML='';
   if(!res.length){el.innerHTML='<div style="padding:20px;opacity:.5">nada encontrado</div>';return;}
   for(const r of res){
+    // filme/serie abrem o detalhe (baixar OU streamar); musica so baixa direto
+    const openable = kind==='movie' || kind==='series';
     const c=posterCard({name:`${r.title} (${r.year||'?'})`,cover:r.poster},
-      ()=> r.have ? toast('já está na biblioteca') : reqItem(kind,r));
+      ()=> r.have ? toast('já está na biblioteca') : openable ? openSearchDetail(kind,r) : reqItem(kind,r));
     const tag=document.createElement('div');
     if(r.have){tag.className='badge';tag.textContent='NA BIBLIOTECA';}
     else{tag.className='req';tag.textContent='＋ baixar';}
