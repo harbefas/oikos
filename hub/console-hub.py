@@ -814,26 +814,6 @@ def request_movie(tmdb_id):
     return radarr("/movie", body)
 
 
-def ensure_radarr_entry(tmdb_id):
-    """Cadastra o filme no Radarr sem baixar (monitored=False, sem busca) --
-    so pra ele existir na base e o Bazarr conseguir achar/baixar legenda pra
-    ele mesmo no fluxo de streaming (filme que ainda nao foi baixado)."""
-    hits = radarr(f"/movie/lookup/tmdb?tmdbId={tmdb_id}")
-    m = hits[0] if isinstance(hits, list) else hits
-    if m.get("id", 0) > 0:
-        return m["id"]
-    qp = _prof1080(radarr("/qualityprofile"))
-    root = radarr("/rootfolder")[0]["path"]
-    body = {
-        "title": m["title"], "tmdbId": m["tmdbId"], "year": m.get("year"),
-        "titleSlug": m["titleSlug"], "images": m.get("images", []),
-        "qualityProfileId": qp, "rootFolderPath": root,
-        "monitored": False,
-        "addOptions": {"searchForMovie": False},
-    }
-    return radarr("/movie", body)["id"]
-
-
 SONARR = "http://localhost:8989/api/v3"
 try:
     SONARR_KEY = os.environ.get("OIKOS_SONARR_KEY", "").strip()
@@ -866,7 +846,7 @@ def search_series(term):
                        if i.get("coverType") == "poster"), None)
         rating = m.get("ratings", {}).get("value")
         out.append({"title": m["title"], "year": m.get("year"),
-                    "tvdbId": m.get("tvdbId"),
+                    "tvdbId": m.get("tvdbId"), "imdbId": m.get("imdbId"),
                     "poster": f"/img?u={urllib.parse.quote(poster)}" if poster else None,
                     "have": m.get("id", 0) > 0,
                     "overview": m.get("overview", ""), "genres": m.get("genres", []),
@@ -892,28 +872,6 @@ def request_series(tvdb_id):
         "addOptions": {"searchForMissingEpisodes": True, "monitor": "firstSeason"},
     }
     return sonarr("/series", body)
-
-
-def ensure_sonarr_entry(tvdb_id):
-    """Cadastra a serie no Sonarr sem monitorar/baixar nada -- so pra existir
-    na base e o Bazarr conseguir achar episodio pra buscar legenda, igual
-    ensure_radarr_entry faz pra filme."""
-    hits = sonarr(f"/series/lookup?term=tvdb:{tvdb_id}")
-    m = hits[0]
-    existing = sonarr(f"/series?tvdbId={tvdb_id}")
-    if existing:
-        return existing[0]["id"]
-    qp = _prof1080(sonarr("/qualityprofile"))
-    seasons = [{"seasonNumber": s["seasonNumber"], "monitored": False}
-               for s in m.get("seasons", [])]
-    body = {
-        "title": m["title"], "tvdbId": m["tvdbId"], "titleSlug": m["titleSlug"],
-        "images": m.get("images", []), "seasons": seasons,
-        "qualityProfileId": qp, "rootFolderPath": sonarr("/rootfolder")[0]["path"],
-        "monitored": False, "seasonFolder": True,
-        "addOptions": {"searchForMissingEpisodes": False, "monitor": "none"},
-    }
-    return sonarr("/series", body)["id"]
 
 
 LIDARR = "http://localhost:8686/api/v1"
@@ -983,87 +941,93 @@ except Exception:
 
 TORRSERVER = os.environ.get("OIKOS_TORRSERVER", "http://localhost:8090").rstrip("/")
 
-BAZARR = "http://localhost:6767/api"
+OSUB_API_KEY = os.environ.get("OIKOS_OSUB_API_KEY", "").strip()
 try:
-    BAZARR_KEY = os.environ.get("OIKOS_BAZARR_KEY", "").strip()
-    if not BAZARR_KEY:
-        BAZARR_KEY = subprocess.run(
-            ["docker", "exec", "bazarr", "sh", "-c",
-             "python3 -c \"import yaml;c=yaml.safe_load(open('/config/config/config.yaml'));"
-             "print(c.get('auth',{}).get('apikey') or c.get('general',{}).get('apikey') or '')\""],
-            capture_output=True, text=True).stdout.strip()
+    # Bazarr nao serve pra legenda de stream (so rastreia filme/episodio com
+    # arquivo em disco -- ver commit que tirou a integracao). Busca direto no
+    # OpenSubtitles.com, reaproveitando o login/senha que o Bazarr ja tem
+    # configurado pra essa conta (mesma conta, API diferente).
+    _raw = subprocess.run(
+        ["docker", "exec", "bazarr", "cat", "/config/config/config.yaml"],
+        capture_output=True, text=True).stdout
+    _blk = re.search(r"^opensubtitlescom:\n((?:[ \t]+.+\n?)+)", _raw, re.MULTILINE)
+    _blk = _blk.group(1) if _blk else ""
+    OSUB_USER = re.search(r"username:\s*(\S+)", _blk).group(1)
+    OSUB_PASS = re.search(r"password:\s*(\S+)", _blk).group(1)
 except Exception:
-    BAZARR_KEY = ""
+    OSUB_USER = OSUB_PASS = ""
+
+_osub_token = None
 
 
-def bazarr_req(path, data=None):
-    """data=None -> GET; data=dict -> POST form-encoded (e' o formato que a
-    API do Bazarr espera pros endpoints de providers/subtitles)."""
-    url = BAZARR + path
-    if data is None:
-        r = urllib.request.Request(url, headers={"X-API-KEY": BAZARR_KEY})
-    else:
-        r = urllib.request.Request(
-            url, data=urllib.parse.urlencode(data, doseq=True).encode(),
-            headers={"X-API-KEY": BAZARR_KEY,
-                     "Content-Type": "application/x-www-form-urlencoded"},
-            method="POST")
-    b = urllib.request.urlopen(r, timeout=30).read()
-    return json.loads(b) if b else None
+def _osub_login():
+    global _osub_token
+    if _osub_token:
+        return _osub_token
+    body = json.dumps({"username": OSUB_USER, "password": OSUB_PASS}).encode()
+    r = urllib.request.Request(
+        "https://api.opensubtitles.com/api/v1/login", data=body,
+        headers={"Content-Type": "application/json", "Api-Key": OSUB_API_KEY,
+                 "User-Agent": "oikos-hub v1"}, method="POST")
+    _osub_token = json.loads(urllib.request.urlopen(r, timeout=20).read())["token"]
+    return _osub_token
 
 
-def fetch_subtitle_bazarr(tmdb_id):
-    """Cadastra o filme (sem baixar) e pede pro Bazarr buscar+baixar legenda
-    pt-BR usando os provedores que ele ja tem configurados (mesma conta que
-    baixa legenda pros filmes normais da biblioteca). Best-effort: qualquer
-    erro no caminho so significa "toca sem legenda", nao trava o streaming."""
-    rid = ensure_radarr_entry(tmdb_id)
-    time.sleep(3)   # Bazarr sincroniza a lista de filmes do Radarr periodicamente
-    hits = bazarr_req(f"/providers/movies?radarrid={rid}&language=pt-BR")
-    cands = hits.get("data") if isinstance(hits, dict) else hits
-    if not cands:
+def _osub_search(params):
+    r = urllib.request.Request(
+        "https://api.opensubtitles.com/api/v1/subtitles?" + urllib.parse.urlencode(params),
+        headers={"Api-Key": OSUB_API_KEY, "User-Agent": "oikos-hub v1"})
+    return json.loads(urllib.request.urlopen(r, timeout=20).read()).get("data", [])
+
+
+def _osub_download(file_id, dest):
+    """O endpoint de download do OpenSubtitles.com da 503 intermitente sem
+    motivo aparente (nao e quota -- confirmado com "remaining" ainda positivo
+    num retry manual) -- poucas tentativas com backoff curto resolvem."""
+    body = json.dumps({"file_id": file_id}).encode()
+    last = None
+    for attempt in range(3):
+        try:
+            r = urllib.request.Request(
+                "https://api.opensubtitles.com/api/v1/download", data=body,
+                headers={"Content-Type": "application/json", "Api-Key": OSUB_API_KEY,
+                         "Authorization": "Bearer " + _osub_login(), "User-Agent": "oikos-hub v1"},
+                method="POST")
+            link = json.loads(urllib.request.urlopen(r, timeout=20).read())["link"]
+            urllib.request.urlretrieve(link, dest)
+            return dest
+        except Exception as ex:
+            last = ex
+            time.sleep(3)
+    raise last
+
+
+def fetch_subtitle(imdb_id):
+    """Legenda pt-BR pro filme direto no OpenSubtitles.com -- funciona sem o
+    filme ter sido baixado (Bazarr nao serve pra isso, ver acima). Best
+    effort: falta de OIKOS_OSUB_API_KEY ou erro qualquer so significa "toca
+    sem legenda", nao trava o streaming."""
+    if not (imdb_id and OSUB_API_KEY and OSUB_USER):
         return None
-    pick = cands[0]
-    bazarr_req("/subtitles", {
-        "radarrid": rid, "language": "pt-BR", "hi": "false", "forced": "false",
-        "provider": pick.get("provider"), "subtitle": pick.get("subtitle"),
-    })
-    movie = bazarr_req(f"/movies?radarrid[]={rid}")
-    rows = movie.get("data") if isinstance(movie, dict) else movie
-    for sub in (rows[0].get("subtitles") or []) if rows else []:
-        if sub.get("path") and "pt" in (sub.get("code2") or "").lower():
-            return sub["path"]
-    return None
+    hits = _osub_search({"imdb_id": str(imdb_id).lstrip("tT"), "languages": "pt-BR"})
+    if not hits:
+        return None
+    file_id = hits[0]["attributes"]["files"][0]["file_id"]
+    return _osub_download(file_id, f"/tmp/oikos-stream-{imdb_id}.srt")
 
 
-def fetch_subtitle_bazarr_episode(tvdb_id, season, episode):
-    """Mesma ideia de fetch_subtitle_bazarr, pro episodio de uma serie:
-    cadastra a serie sem baixar, acha o episodeId no Sonarr e pede legenda
-    pt-BR pro Bazarr por esse episodio."""
-    sid = ensure_sonarr_entry(tvdb_id)
-    time.sleep(3)
-    eps = sonarr(f"/episode?seriesId={sid}")
-    ep = next((e for e in eps if e["seasonNumber"] == season
-               and e["episodeNumber"] == episode), None)
-    if not ep:
+def fetch_subtitle_episode(imdb_id, season, episode):
+    """Mesma ideia de fetch_subtitle, pro episodio de uma serie -- imdb_id e
+    o da serie (parent), busca pelo par temporada/episodio."""
+    if not (imdb_id and OSUB_API_KEY and OSUB_USER):
         return None
-    eid = ep["id"]
-    hits = bazarr_req(f"/providers/episodes?episodeid={eid}&language=pt-BR")
-    cands = hits.get("data") if isinstance(hits, dict) else hits
-    if not cands:
+    hits = _osub_search({"parent_imdb_id": str(imdb_id).lstrip("tT"),
+                          "season_number": season, "episode_number": episode,
+                          "languages": "pt-BR"})
+    if not hits:
         return None
-    pick = cands[0]
-    bazarr_req("/subtitles", {
-        "seriesid": sid, "episodeid": eid, "language": "pt-BR",
-        "hi": "false", "forced": "false",
-        "provider": pick.get("provider"), "subtitle": pick.get("subtitle"),
-    })
-    row = bazarr_req(f"/episodes?episodeid[]={eid}")
-    rows = row.get("data") if isinstance(row, dict) else row
-    for sub in (rows[0].get("subtitles") or []) if rows else []:
-        if sub.get("path") and "pt" in (sub.get("code2") or "").lower():
-            return sub["path"]
-    return None
+    file_id = hits[0]["attributes"]["files"][0]["file_id"]
+    return _osub_download(file_id, f"/tmp/oikos-stream-{imdb_id}-s{season}e{episode}.srt")
 
 
 def prowlarr(path):
@@ -2154,7 +2118,7 @@ async function pickStream(r,season,episode){
 }
 
 function showSourceList(r,opts,auto,season,episode){
-  const extra = season!=null ? {tvdbId:r.tvdbId,season,episode} : {tmdbId:r.tmdbId};
+  const extra = season!=null ? {imdbId:r.imdbId,season,episode} : {imdbId:r.imdbId};
   document.getElementById('dt-body').innerHTML=`
     <div class=dt-sec>${auto?'Conectando na melhor fonte — ':'Escolha a fonte — '}${r.title}</div>
     <div id=streampicks>${opts.map(o=>`
@@ -3586,13 +3550,13 @@ class Handler(BaseHTTPRequestHandler):
                     url, torrent_sub = stream_magnet(link)
                     sub_path = None
                     try:
-                        if d.get("tvdbId") and d.get("season") is not None and d.get("episode") is not None:
-                            sub_path = fetch_subtitle_bazarr_episode(
-                                d["tvdbId"], int(d["season"]), int(d["episode"]))
-                        elif d.get("tmdbId"):
-                            sub_path = fetch_subtitle_bazarr(d["tmdbId"])
+                        if d.get("imdbId") and d.get("season") is not None and d.get("episode") is not None:
+                            sub_path = fetch_subtitle_episode(
+                                d["imdbId"], int(d["season"]), int(d["episode"]))
+                        elif d.get("imdbId"):
+                            sub_path = fetch_subtitle(d["imdbId"])
                     except Exception as ex:
-                        print(f"[stream] legenda via bazarr falhou: {ex}")
+                        print(f"[stream] legenda via opensubtitles falhou: {ex}")
                     sub = sub_path or torrent_sub
                     subprocess.run(["stop-game"])
                     STATE["cover"] = d.get("cover")
