@@ -2083,15 +2083,8 @@ function openSearchDetail(kind,r){
 }
 
 // ---------- streaming direto (tipo Stremio): busca magnet no Prowlarr,
-// escolhe a melhor opcao e toca no mpv sem esperar o download terminar ----------
+// mostra as fontes (ja ordenadas por seeders) pra escolher qual tocar ----------
 const gb=n=>n?(n/1e9).toFixed(1)+' GB':'?';
-const BAD_SRC=/\bcam\b|\bts\b|\bhdcam\b|\btelesync\b/i;
-
-// escolha padrao: melhor fonte por seeders, descartando cam/ts (qualidade ruim)
-function bestSource(opts){
-  const good=opts.filter(o=>!BAD_SRC.test(o.title));
-  return (good.length?good:opts)[0];
-}
 
 function showEpisodePicker(r){
   document.getElementById('epstream').innerHTML=`
@@ -2118,19 +2111,18 @@ async function pickStream(r,season,episode){
     document.getElementById('dt-body').innerHTML='<div style="padding:40px;text-align:center;opacity:.5">nenhuma fonte encontrada</div>';
     return;
   }
-  showSourceList(r,opts,true,season,episode);
+  showSourceList(r,opts,season,episode);
 }
 
-function showSourceList(r,opts,auto,season,episode){
+function showSourceList(r,opts,season,episode){
   const extra = season!=null ? {imdbId:r.imdbId,season,episode} : {imdbId:r.imdbId};
   document.getElementById('dt-body').innerHTML=`
-    <div class=dt-sec>${auto?'Conectando na melhor fonte — ':'Escolha a fonte — '}${r.title}</div>
+    <div class=dt-sec>Escolha a fonte — ${r.title}</div>
     <div id=streampicks>${opts.map(o=>`
       <div class=ep onclick='startStream(${JSON.stringify(o.link)},${JSON.stringify(r.poster||null)},${JSON.stringify(extra)})'>
         <div>${o.title}</div>
         <div style="opacity:.5;font-size:.85em">${gb(o.size)} · ${o.seeders} seeders · ${o.indexer||''}</div>
       </div>`).join('')}</div>`;
-  if(auto) startStream(bestSource(opts).link, r.poster||null, extra);
 }
 
 async function startStream(link,cover,extra){
