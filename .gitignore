@@ -2,6 +2,10 @@ __pycache__/
 *.pyc
 *.log
 
+# local container runtime state
+homelab/.env
+homelab/config/
+
 # built UI (CI produces the release tarball)
 hub/ui/dist/
 hub/ui/node_modules/
