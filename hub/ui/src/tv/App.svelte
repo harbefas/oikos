@@ -199,7 +199,7 @@
       const caption = cardH - curW * 1.5
       const chrome = shelf.getBoundingClientRect().height - cardH
       const target = rowsEl.clientHeight * 0.62 - chrome - caption
-      const w = Math.max(110, Math.min(250, target / 1.5))
+      const w = Math.max(92, Math.min(250, target / 1.5))
       rowsEl.style.setProperty('--card-w', `${Math.round(w)}px`)
     }
     fit()
@@ -576,20 +576,15 @@
     flex: 0 0 auto;
     position: relative;
     z-index: 3;
-    /* the header is a translucent wash, not a solid bar, so the hero can sit
-       under it -- the clock is right-aligned and the title is not */
-    padding: 88px 52px 0;
+    /* clears the 118px header: the wash is translucent, but it still greys out
+       anything under it, and the title is the one thing that cannot afford to
+       be dimmed. The peek does not depend on this any more -- the card fit
+       below reclaims whatever the hero takes. */
+    padding: 132px 52px 0;
     /* 56px = the aside's collapsed sliver (240px width - 184px translateX);
        kept in sync so content clears the full label list once it opens */
     padding-left: 56px;
     transition: padding-left var(--duration-settle) var(--ease-focus);
-  }
-
-  /* A short panel has to spend its height on the shelves, not the chrome. */
-  @media (max-height: 800px) {
-    .stage {
-      padding-top: 64px;
-    }
   }
 
   .rows {
