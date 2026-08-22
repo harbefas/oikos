@@ -173,6 +173,31 @@
      view, so the rows underneath stay visible as the next thing to reach. */
   let rowsEl = $state()
 
+  /* The next row has to stay visible, and no amount of vh math can know how
+     tall the hero actually ended up. So measure: size the card so that one
+     shelf plus its chrome (label, track padding, card caption) fills ~72% of
+     the rows area, which leaves the remaining ~28% as the peek at any window
+     size. Safe against feedback loops -- .rows is flex:1 and scrolls, so its
+     height depends on the stage, never on the cards inside it. */
+  $effect(() => {
+    if (!rowsEl) return
+    const fit = () => {
+      const shelf = rowsEl.querySelector('.shelf')
+      const card = shelf?.querySelector('.track > *')
+      if (!shelf || !card) return
+      const cardH = card.getBoundingClientRect().height
+      if (!cardH) return
+      const chrome = shelf.getBoundingClientRect().height - cardH
+      const target = rowsEl.clientHeight * 0.72 - chrome
+      const w = Math.max(110, Math.min(250, target / 1.5))
+      rowsEl.style.setProperty('--card-w', `${Math.round(w)}px`)
+    }
+    fit()
+    const ro = new ResizeObserver(fit)
+    ro.observe(rowsEl)
+    return () => ro.disconnect()
+  })
+
   $effect(() => {
     const n = sections.length
     if (!rowsEl) return

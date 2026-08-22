@@ -49,7 +49,7 @@
        each time focus moved. The floor is what a two-line title plus a clamped
        synopsis actually measures -- below that the content overflows upward
        (align-items: flex-end) and the header crops it. */
-    height: clamp(220px, 24vh, 300px);
+    height: clamp(190px, 24vh, 300px);
     display: flex;
     align-items: flex-end;
     padding: 0 4px 30px;
@@ -82,7 +82,15 @@
   }
 
   /* Weight 500 — §3 forbids 700 on Garamond. */
+  /* One line, always. The title is the only part of the hero whose height is
+     not already bounded, and a two-line title is what pushed the content past
+     the box and up under the header. */
   h1 {
+    display: -webkit-box;
+    -webkit-line-clamp: 1;
+    line-clamp: 1;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
     font-family: var(--font-serif);
     font-size: var(--font-size-4xl);
     font-weight: 500;
@@ -108,28 +116,6 @@
   /* A short panel cannot seat a two-line title and three lines of prose in the
      space the shelves can spare, so the synopsis gives up a line there rather
      than the hero growing and eating the next row's peek. */
-  @media (max-height: 800px) {
-    .overview {
-      -webkit-line-clamp: 2;
-      line-clamp: 2;
-    }
-
-    /* One line of title too: with the synopsis already trimmed, the title is
-       the only thing left that can double the hero's height, and a hero that
-       tall leaves the next row with nothing but a dim label showing. */
-    h1 {
-      -webkit-line-clamp: 1;
-      line-clamp: 1;
-      display: -webkit-box;
-      -webkit-box-orient: vertical;
-      overflow: hidden;
-    }
-
-    /* deterministic now: one-line title + meta + two lines of prose */
-    .hero {
-      height: 170px;
-    }
-  }
 
   .overview {
     margin-top: var(--space-12);
