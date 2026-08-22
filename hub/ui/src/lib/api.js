@@ -45,14 +45,19 @@ export const idle = () => safe('/api/idle', { idle: false })
 export const detail = (id) => safe(`/api/detail?id=${encodeURIComponent(id)}`, {})
 export const episodes = (id) => safe(`/api/episodes?id=${encodeURIComponent(id)}`, [])
 export const searchQuery = () => safe('/api/search-query', { q: '' })
-export const searchMovies = (q) => safe(`/api/search?q=${encodeURIComponent(q)}`, [])
-export const searchSeries = (q) => safe(`/api/search-series?q=${encodeURIComponent(q)}`, [])
-export const searchMusic = (q) => safe(`/api/search-music?q=${encodeURIComponent(q)}`, [])
+// Radarr/Sonarr/Lidarr lookup hits external metadata providers (TMDB/TVDB/
+// MusicBrainz) -- slower than the local endpoints above, so they get more
+// runway before silently falling back to [].
+const SEARCH_TIMEOUT = 12000
+const STREAM_TIMEOUT = 30000
+export const searchMovies = (q) => safe(`/api/search?q=${encodeURIComponent(q)}`, [], SEARCH_TIMEOUT)
+export const searchSeries = (q) => safe(`/api/search-series?q=${encodeURIComponent(q)}`, [], SEARCH_TIMEOUT)
+export const searchMusic = (q) => safe(`/api/search-music?q=${encodeURIComponent(q)}`, [], SEARCH_TIMEOUT)
 // kind: 'movie' | 'series' -- decide a categoria de indexer no Prowlarr.
 // Prowlarr consulta varios indexers de uma vez -- 6-16s e normal, o timeout
 // padrao de 3.5s (bom pros outros endpoints) matava essa busca sempre.
 export const searchStream = (q, kind) =>
-  safe(`/api/search-stream?kind=${kind}&q=${encodeURIComponent(q)}`, [], 30000)
+  safe(`/api/search-stream?kind=${kind}&q=${encodeURIComponent(q)}`, [], STREAM_TIMEOUT)
 
 export const gameDetail = (name, system) =>
   safe(

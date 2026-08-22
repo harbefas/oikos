@@ -247,6 +247,12 @@
           {:else}
             <GroupedGrid {items} ratio={tab?.ratio ?? '2 / 3'} onselect={openDetail} />
           {/if}
+        {:else if active === 'games'}
+          {#if !items.length}
+            <p class="hint">Nada aqui.</p>
+          {:else}
+            <GroupedGrid {items} groupBy="label" ratio={tab?.ratio ?? '2 / 3'} onselect={openDetail} />
+          {/if}
         {:else if !items.length}
           <p class="hint">Nada aqui.</p>
         {:else}

@@ -1,14 +1,15 @@
 <script>
   import Grid from './Grid.svelte'
 
-  let { items = [], ratio = '2 / 3', onselect = () => {} } = $props()
+  let { items = [], ratio = '2 / 3', onselect = () => {}, groupBy = 'genre' } = $props()
 
   // Agrupa pelo genero unico que o backend manda (1o genero do Jellyfin/TMDB
-  // -- sem duplicar item em varias secoes).
+  // -- sem duplicar item em varias secoes). Jogos nao tem genero, so sistema
+  // (`label`, ex. "PC"/"SNES") -- por isso o groupBy e configuravel.
   const groups = $derived.by(() => {
     const by = new Map()
     for (const item of items) {
-      const g = item.genre || 'Outros'
+      const g = item[groupBy] || 'Outros'
       if (!by.has(g)) by.set(g, [])
       by.get(g).push(item)
     }
