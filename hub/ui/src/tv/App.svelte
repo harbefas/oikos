@@ -180,15 +180,25 @@
      size. Safe against feedback loops -- .rows is flex:1 and scrolls, so its
      height depends on the stage, never on the cards inside it. */
   $effect(() => {
-    if (!rowsEl) return
+    // depends on sections: the first run happens while the rows are still
+    // loading, and without this the fit never retries once they render
+    const n = sections.length
+    if (!rowsEl || !n) return
     const fit = () => {
-      const shelf = rowsEl.querySelector('.shelf')
+      // a non-active shelf: the focused card carries a transform: scale, which
+      // would inflate every measurement taken from it
+      const shelf = rowsEl.querySelector('.shelf:not(.active)')
       const card = shelf?.querySelector('.track > *')
       if (!shelf || !card) return
       const cardH = card.getBoundingClientRect().height
-      if (!cardH) return
+      const curW = parseFloat(getComputedStyle(card).width)
+      if (!cardH || !curW) return
+      // a card is poster (2/3) plus the caption under it; a shelf is a card
+      // plus its label and track padding. Both extras are fixed, so measure
+      // them once and solve for the width that hits the target shelf height.
+      const caption = cardH - curW * 1.5
       const chrome = shelf.getBoundingClientRect().height - cardH
-      const target = rowsEl.clientHeight * 0.72 - chrome
+      const target = rowsEl.clientHeight * 0.62 - chrome - caption
       const w = Math.max(110, Math.min(250, target / 1.5))
       rowsEl.style.setProperty('--card-w', `${Math.round(w)}px`)
     }
