@@ -113,6 +113,22 @@
       -webkit-line-clamp: 2;
       line-clamp: 2;
     }
+
+    /* One line of title too: with the synopsis already trimmed, the title is
+       the only thing left that can double the hero's height, and a hero that
+       tall leaves the next row with nothing but a dim label showing. */
+    h1 {
+      -webkit-line-clamp: 1;
+      line-clamp: 1;
+      display: -webkit-box;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+    }
+
+    /* deterministic now: one-line title + meta + two lines of prose */
+    .hero {
+      height: 170px;
+    }
   }
 
   .overview {

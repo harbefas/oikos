@@ -550,6 +550,13 @@
     transition: padding-left var(--duration-settle) var(--ease-focus);
   }
 
+  /* A short panel has to spend its height on the shelves, not the chrome. */
+  @media (max-height: 800px) {
+    .stage {
+      padding-top: 64px;
+    }
+  }
+
   .rows {
     flex: 1;
     min-height: 0;
