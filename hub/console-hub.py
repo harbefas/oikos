@@ -172,9 +172,13 @@ def list_resume(n=12):
                     break
         except (OSError, ValueError):
             continue
+        # id/genre/backdrop vem do list_movies e sao o que a TV usa pro hero
+        # (sinopse via /api/detail e a arte de fundo) -- sem eles a shelf de
+        # "continuar assistindo" ficava so com o titulo, diferente das outras
         out.append({"name": m.get("name") or os.path.basename(p), "path": p,
-                    "pos": pos, "cover": m.get("cover"), "type": "movie",
-                    "mtime": os.path.getmtime(fp)})
+                    "pos": pos, "id": m.get("id"), "genre": m.get("genre"),
+                    "cover": m.get("cover"), "backdrop": m.get("backdrop"),
+                    "type": "movie", "mtime": os.path.getmtime(fp)})
     out.sort(key=lambda x: x["mtime"], reverse=True)
     return out[:n]
 MUSIC = os.environ.get("OIKOS_MUSIC", f"{MEDIA}/music")
@@ -1009,7 +1013,7 @@ def _osub_download(file_id, dest):
     num retry manual) -- poucas tentativas com backoff curto resolvem."""
     body = json.dumps({"file_id": file_id}).encode()
     last = None
-    for attempt in range(3):
+    for attempt in range(5):
         try:
             r = urllib.request.Request(
                 "https://api.opensubtitles.com/api/v1/download", data=body,
@@ -1021,7 +1025,7 @@ def _osub_download(file_id, dest):
             return dest
         except Exception as ex:
             last = ex
-            time.sleep(3)
+            time.sleep(2 * (attempt + 1))
     raise last
 
 
