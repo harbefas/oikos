@@ -1,5 +1,6 @@
 <script>
   import { onMount, onDestroy } from 'svelte'
+  import { fly } from 'svelte/transition'
   import * as api from '../lib/api.js'
   import Ambient from '../lib/components/Ambient.svelte'
   import Shelf from '../lib/components/Shelf.svelte'
@@ -60,6 +61,21 @@
     ].filter((s) => s.items?.length)
   }
 
+  // Mesmo agrupamento do celular (GroupedGrid), mas cada grupo vira uma
+  // shelf propria em vez de uma secao com grid interno -- o layout da TV ja
+  // e shelves empilhadas, entao isso cai direto no row/col nav existente.
+  function groupSections(key, items, groupBy) {
+    const by = new Map()
+    for (const item of items) {
+      const g = item[groupBy] || 'Outros'
+      if (!by.has(g)) by.set(g, [])
+      by.get(g).push(item)
+    }
+    return [...by.entries()]
+      .sort((a, b) => b[1].length - a[1].length || a[0].localeCompare(b[0], 'pt-BR'))
+      .map(([g, group]) => ({ key: `${key}-${g}`, title: g, items: group }))
+  }
+
   function appItems() {
     return libraries.apps.map((app) => ({
       ...app,
@@ -84,10 +100,10 @@
     row = 0
     col = 0
     if (id === 'home') sections = homeSections()
-    else if (id === 'movies') sections = [{ key: 'movies', title: 'Filmes', items: libraries.movies }]
-    else if (id === 'series') sections = [{ key: 'series', title: 'Séries', items: libraries.series }]
+    else if (id === 'movies') sections = groupSections('movies', libraries.movies, 'genre')
+    else if (id === 'series') sections = groupSections('series', libraries.series, 'genre')
     else if (id === 'music') sections = [{ key: 'music', title: 'Música', items: libraries.albums, ratio: '1 / 1' }]
-    else if (id === 'games') sections = [{ key: 'games', title: 'Jogos', items: libraries.games }]
+    else if (id === 'games') sections = groupSections('games', libraries.games, 'label')
     else if (id === 'apps') sections = [{ key: 'apps', title: 'Apps', items: appItems(), ratio: '1 / 1' }]
     else if (id === 'downloads') refreshDownloads()
     else if (id === 'search') runSearch(searchText)
@@ -150,6 +166,27 @@
       col = Math.max(0, Math.min(n - 1, col + dc))
     }
   }
+
+  /* The vertical twin of the shelf's own scroll effect: moving down a row has
+     to carry the viewport with it, or the focused card sits below the fold.
+     The row is pinned near the top third rather than scrolled just barely into
+     view, so the rows underneath stay visible as the next thing to reach. */
+  let rowsEl = $state()
+
+  $effect(() => {
+    const n = sections.length
+    if (!rowsEl) return
+    // row 0 goes all the way up: anything else crops the hero above the shelves
+    if (row === 0 || !n) {
+      rowsEl.scrollTo({ top: 0, behavior: 'smooth' })
+      return
+    }
+    const el = rowsEl.querySelectorAll('.shelf')[row]
+    if (!el) return
+    const box = rowsEl.getBoundingClientRect()
+    const top = rowsEl.scrollTop + (el.getBoundingClientRect().top - box.top) - 8
+    rowsEl.scrollTo({ top: Math.max(0, top), behavior: 'smooth' })
+  })
 
   async function openDetail(item) {
     if (!item) return
@@ -231,10 +268,10 @@
       return
     }
     if (sidebar) {
-      if (k === 'ArrowUp') nav = Math.max(0, nav - 1)
-      else if (k === 'ArrowDown') nav = Math.min(CATS.length - 1, nav + 1)
-      else if (k === 'ArrowRight' || k === 'Escape') sidebar = false
-      else if (k === 'Enter') { show(CATS[nav].id); sidebar = false }
+      // muda de aba assim que o foco passa por ela -- nao precisa selecionar
+      if (k === 'ArrowUp') { nav = Math.max(0, nav - 1); show(CATS[nav].id) }
+      else if (k === 'ArrowDown') { nav = Math.min(CATS.length - 1, nav + 1); show(CATS[nav].id) }
+      else if (k === 'ArrowRight' || k === 'Escape' || k === 'Enter') sidebar = false
       else return
       e.preventDefault()
       return
@@ -331,7 +368,7 @@
       {/each}
     </aside>
 
-    <div class="rows">
+    <div class="stage" class:sidebar-open={sidebar}>
       {#if screen === 'search'}
         <div class="search-bar">
           <span>{searchText || 'Digite no celular'}</span>
@@ -340,22 +377,29 @@
       {:else}
         <Hero item={current} />
       {/if}
+    </div>
 
-      {#if loading}
-        <p class="hint">Carregando…</p>
-      {:else if !sections.length}
-        <p class="hint">{screen === 'search' ? 'Nada encontrado.' : 'Nada aqui.'}</p>
-      {:else}
-        {#each sections as s, i (s.key)}
-          <Shelf
-            title={s.title}
-            items={s.items}
-            ratio={s.ratio ?? '2 / 3'}
-            focus={i === row ? col : -1}
-            onselect={openDetail}
-          />
-        {/each}
-      {/if}
+    <div class="rows" class:sidebar-open={sidebar} bind:this={rowsEl}>
+      {#key screen}
+        <div class="screen" in:fly={{ y: 16, duration: 220, opacity: 0 }} out:fly={{ y: -16, duration: 140, opacity: 0 }}>
+
+          {#if loading}
+            <p class="hint">Carregando…</p>
+          {:else if !sections.length}
+            <p class="hint">{screen === 'search' ? 'Nada encontrado.' : 'Nada aqui.'}</p>
+          {:else}
+            {#each sections as s, i (s.key)}
+              <Shelf
+                title={s.title}
+                items={s.items}
+                ratio={s.ratio ?? '2 / 3'}
+                focus={i === row ? col : -1}
+                onselect={openDetail}
+              />
+            {/each}
+          {/if}
+        </div>
+      {/key}
     </div>
   </main>
 {/if}
@@ -396,7 +440,23 @@
 {/if}
 
 <style>
+  /* the shared tokens.css leaves html/body auto-height for the phone's
+     normal page scroll -- on the TV that lets the whole page scroll under
+     the absolutely-positioned aside, dragging it along instead of leaving
+     it fixed while only .rows scrolls */
+  :global(html),
+  :global(body),
+  :global(#app) {
+    height: 100%;
+    overflow: hidden;
+  }
+
   main {
+    /* TV-only override of the shared token (the phone keeps its 250px): the
+       card drives the shelf height, so tying it to the viewport is what leaves
+       the next row peeking above the fold at any screen size. Capped at the
+       token value so a big panel does not inflate past the intended size. */
+    --card-w: min(250px, 20vh);
     position: relative;
     z-index: 1;
     height: 100%;
@@ -428,11 +488,17 @@
     bottom: 0;
     left: 0;
     width: 240px;
-    padding: 136px var(--space-24) var(--space-32);
+    padding: 0 var(--space-24);
     display: flex;
     flex-direction: column;
+    justify-content: center;
     gap: var(--space-8);
-    background: linear-gradient(90deg, var(--bg) 78%, transparent);
+    background: var(--bg);
+    /* mask (nao so background) pra o realce do item focado tambem sumir no
+       degrade -- so no background, o fundo do botao ativo ficava com borda
+       dura passando por cima do fade, "vazando" pra fora dele */
+    mask-image: linear-gradient(90deg, #000 78%, transparent);
+    -webkit-mask-image: linear-gradient(90deg, #000 78%, transparent);
     transform: translateX(-184px);
     transition: transform var(--duration-settle) var(--ease-focus);
   }
@@ -451,6 +517,10 @@
     font-family: var(--font-sans);
     font-size: var(--font-size-xs);
     padding: 0 var(--space-12);
+    /* navegacao e via onkey (setas), nao :focus real -- o outline nativo do
+       Chromium (essa caixa arredondada solta que sobrava do lado do texto)
+       nao tem nada a ver com o .focus/.active daqui, so atrapalha */
+    outline: none;
   }
 
   aside button.active {
@@ -463,11 +533,36 @@
     background: var(--accent-muted);
   }
 
+  /* The hero sits OUTSIDE the scroll container: it is the read-out for whatever
+     is focused, so a deeper row must not push it off-screen. Keeping it a
+     sibling rather than a sticky child means no row can ever travel above or
+     behind it -- only .rows scrolls. */
+  .stage {
+    flex: 0 0 auto;
+    position: relative;
+    z-index: 3;
+    /* the header is a translucent wash, not a solid bar, so the hero can sit
+       under it -- the clock is right-aligned and the title is not */
+    padding: 88px 52px 0;
+    /* 56px = the aside's collapsed sliver (240px width - 184px translateX);
+       kept in sync so content clears the full label list once it opens */
+    padding-left: 56px;
+    transition: padding-left var(--duration-settle) var(--ease-focus);
+  }
+
   .rows {
-    height: 100%;
+    flex: 1;
+    min-height: 0;
     overflow-y: auto;
     scrollbar-width: none;
-    padding: 132px 52px 52px;
+    padding: 0 52px 52px;
+    padding-left: 56px;
+    transition: padding-left var(--duration-settle) var(--ease-focus);
+  }
+
+  .stage.sidebar-open,
+  .rows.sidebar-open {
+    padding-left: 240px;
   }
 
   .search-bar {

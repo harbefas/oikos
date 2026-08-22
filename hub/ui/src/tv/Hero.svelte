@@ -45,7 +45,11 @@
 
 <style>
   .hero {
-    min-height: 30vh;
+    /* Fixed, not min-height: a variable hero would shift every shelf below it
+       each time focus moved. The floor is what a two-line title plus a clamped
+       synopsis actually measures -- below that the content overflows upward
+       (align-items: flex-end) and the header crops it. */
+    height: clamp(220px, 24vh, 300px);
     display: flex;
     align-items: flex-end;
     padding: 0 4px 30px;
@@ -101,6 +105,16 @@
 
   /* Synopsis is prose, so it stays on the reading face — this is the marker
      §1 calls out: Garamond as an actual reading face, not headline veneer. */
+  /* A short panel cannot seat a two-line title and three lines of prose in the
+     space the shelves can spare, so the synopsis gives up a line there rather
+     than the hero growing and eating the next row's peek. */
+  @media (max-height: 800px) {
+    .overview {
+      -webkit-line-clamp: 2;
+      line-clamp: 2;
+    }
+  }
+
   .overview {
     margin-top: var(--space-12);
     font-family: var(--font-serif);
