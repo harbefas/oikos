@@ -51,7 +51,7 @@
      marked by contrast alone. */
   h2 {
     font-family: var(--font-sans);
-    font-size: var(--font-size-2xs);
+    font-size: var(--label-size);
     font-weight: 500;
     letter-spacing: var(--tracking-eyebrow);
     text-transform: uppercase;

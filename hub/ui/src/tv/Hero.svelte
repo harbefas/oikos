@@ -52,7 +52,7 @@
     height: clamp(190px, 24vh, 300px);
     display: flex;
     align-items: flex-end;
-    padding: 0 4px 30px;
+    padding: 0 var(--space-4) var(--space-32);
     max-width: 62ch;
   }
 
@@ -73,7 +73,7 @@
   @keyframes rise {
     from {
       opacity: 0;
-      transform: translateY(12px);
+      transform: translateY(var(--space-12));
     }
     to {
       opacity: 1;
@@ -104,7 +104,7 @@
   .meta {
     margin-top: var(--space-12);
     font-family: var(--font-sans);
-    font-size: var(--font-size-2xs);
+    font-size: var(--label-size);
     font-weight: 500;
     letter-spacing: var(--tracking-eyebrow);
     text-transform: uppercase;
@@ -120,7 +120,7 @@
   .overview {
     margin-top: var(--space-12);
     font-family: var(--font-serif);
-    font-size: var(--font-size-sm);
+    font-size: var(--content-size);
     line-height: var(--leading-prose);
     text-wrap: pretty;
     color: var(--tx-2);

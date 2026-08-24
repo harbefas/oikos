@@ -33,6 +33,26 @@
   --card-focus-lift: -10px;
   --card-tilt-max: 15deg;
   --card-depth-step: 26px;
+
+  /* --- 10-foot surface geometry -------------------------------------------
+     Overscan margin, header band and the sidebar. These are not spacing steps
+     and must not be rounded to the grid: they are physical properties of the
+     surface (what a TV crops, how far the aside travels), so §6a's scale floors
+     do not apply to them — but they get names, because a bare 52px in a rule is
+     indistinguishable from a token nobody looked up. */
+  --tv-safe: 52px;
+  --tv-header: 118px;
+  --tv-aside-w: 240px;
+  --tv-aside-peek: 56px;
+  --tv-aside-hidden: calc(var(--tv-aside-peek) - var(--tv-aside-w));
+
+  /* --- reading distance (§6a Scale) ---------------------------------------
+     Same scale at both distances; what changes is which steps are legal. A
+     component shared by the phone and the TV cannot hardcode either, so chrome
+     labels and content type read these two, and the TV surface raises them to
+     its floors in tv/App.svelte. Phone keeps the desktop steps. */
+  --label-size: var(--font-size-2xs);
+  --content-size: var(--font-size-base);
 }
 
 /* Reduced motion: every tier in §6a collapses, and the layout must still make

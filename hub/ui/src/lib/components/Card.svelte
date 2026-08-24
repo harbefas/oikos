@@ -96,7 +96,7 @@
   .blank {
     background: var(--bg-2);
     color: var(--tx-2);
-    font-size: clamp(36px, 6vw, 68px);
+    font-size: clamp(var(--font-size-2xl), 6vw, var(--font-size-4xl));
     display: grid;
     place-items: center;
   }
@@ -108,7 +108,7 @@
     inset: auto 0 0 0;
     padding: var(--space-24) var(--space-12) var(--space-12);
     font-family: var(--font-sans);
-    font-size: var(--font-size-xs);
+    font-size: var(--label-size);
     font-weight: 500;
     line-height: var(--leading-ui);
     color: var(--tx);
@@ -139,10 +139,10 @@
     border-radius: var(--radius-sm);
     color: var(--tx-3);
     font-family: var(--font-sans);
-    font-size: var(--font-size-2xs);
+    font-size: var(--label-size);
     font-weight: 500;
     letter-spacing: var(--tracking-eyebrow);
     text-transform: uppercase;
-    padding: 2px 6px;
+    padding: var(--space-4) var(--space-8);
   }
 </style>

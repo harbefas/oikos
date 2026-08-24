@@ -492,6 +492,11 @@
        the next row peeking above the fold at any screen size. Capped at the
        token value so a big panel does not inflate past the intended size. */
     --card-w: min(250px, 20vh);
+    /* §6a floors for the 10-foot surface: chrome labels start at --font-size-sm
+       and content at --font-size-lg. Declared once here so the components
+       shared with the phone stay honest at both distances. */
+    --label-size: var(--font-size-sm);
+    --content-size: var(--font-size-lg);
     position: relative;
     z-index: 1;
     height: 100%;
@@ -505,11 +510,11 @@
     top: 0;
     right: 0;
     left: 0;
-    height: 118px;
+    height: var(--tv-header);
     display: flex;
     align-items: center;
     justify-content: flex-end;
-    padding: 0 52px;
+    padding: 0 var(--tv-safe);
     z-index: 5;
     /* the rows scroll under this; without a wash the clock lands on artwork */
     background: linear-gradient(var(--scrim) 40%, transparent);
@@ -522,7 +527,7 @@
     top: 0;
     bottom: 0;
     left: 0;
-    width: 240px;
+    width: var(--tv-aside-w);
     padding: 0 var(--space-24);
     display: flex;
     flex-direction: column;
@@ -534,7 +539,7 @@
        dura passando por cima do fade, "vazando" pra fora dele */
     mask-image: linear-gradient(90deg, #000 78%, transparent);
     -webkit-mask-image: linear-gradient(90deg, #000 78%, transparent);
-    transform: translateX(-184px);
+    transform: translateX(var(--tv-aside-hidden));
     transition: transform var(--duration-settle) var(--ease-focus);
   }
 
@@ -550,7 +555,7 @@
     border-left: 2px solid transparent;
     color: var(--tx-3);
     font-family: var(--font-sans);
-    font-size: var(--font-size-xs);
+    font-size: var(--label-size);
     padding: 0 var(--space-12);
     /* navegacao e via onkey (setas), nao :focus real -- o outline nativo do
        Chromium (essa caixa arredondada solta que sobrava do lado do texto)
@@ -576,14 +581,14 @@
     flex: 0 0 auto;
     position: relative;
     z-index: 3;
-    /* clears the 118px header: the wash is translucent, but it still greys out
+    /* clears the header: the wash is translucent, but it still greys out
        anything under it, and the title is the one thing that cannot afford to
        be dimmed. The peek does not depend on this any more -- the card fit
        below reclaims whatever the hero takes. */
-    padding: 132px 52px 0;
-    /* 56px = the aside's collapsed sliver (240px width - 184px translateX);
-       kept in sync so content clears the full label list once it opens */
-    padding-left: 56px;
+    padding: calc(var(--tv-header) + var(--space-16)) var(--tv-safe) 0;
+    /* the aside's collapsed sliver, so content clears the full label list once
+       it opens */
+    padding-left: var(--tv-aside-peek);
     transition: padding-left var(--duration-settle) var(--ease-focus);
   }
 
@@ -592,14 +597,14 @@
     min-height: 0;
     overflow-y: auto;
     scrollbar-width: none;
-    padding: 0 52px 52px;
-    padding-left: 56px;
+    padding: 0 var(--tv-safe) var(--tv-safe);
+    padding-left: var(--tv-aside-peek);
     transition: padding-left var(--duration-settle) var(--ease-focus);
   }
 
   .stage.sidebar-open,
   .rows.sidebar-open {
-    padding-left: 240px;
+    padding-left: var(--tv-aside-w);
   }
 
   .search-bar {
@@ -607,7 +612,7 @@
     display: flex;
     align-items: flex-end;
     gap: var(--space-8);
-    padding: 0 4px 30px;
+    padding: 0 var(--space-4) var(--space-32);
     font-family: var(--font-serif);
     font-size: var(--font-size-4xl);
     color: var(--tx);
@@ -630,8 +635,8 @@
 
   .hint {
     color: var(--tx-3);
-    font-size: 15px;
-    padding: 8px 4px;
+    font-size: var(--label-size);
+    padding: var(--space-8) var(--space-4);
   }
 
   .detail {
@@ -665,7 +670,7 @@
     display: flex;
     gap: var(--space-32);
     width: min(1180px, calc(100vw - 104px));
-    padding: 0 52px 56px;
+    padding: 0 var(--tv-safe) var(--tv-aside-peek);
   }
 
   .poster {
@@ -694,7 +699,7 @@
     min-height: 1.2em;
     color: var(--tx-3);
     font-family: var(--font-sans);
-    font-size: var(--font-size-2xs);
+    font-size: var(--label-size);
     letter-spacing: var(--tracking-eyebrow);
     text-transform: uppercase;
   }
@@ -703,7 +708,7 @@
     margin-top: var(--space-12);
     color: var(--tx-2);
     font-family: var(--font-serif);
-    font-size: var(--font-size-sm);
+    font-size: var(--content-size);
     line-height: var(--leading-prose);
     display: -webkit-box;
     -webkit-line-clamp: 4;
@@ -735,7 +740,7 @@
     background: var(--accent);
     color: var(--bg);
     font-family: var(--font-sans);
-    font-size: var(--font-size-xs);
+    font-size: var(--label-size);
     font-weight: 600;
   }
 

@@ -330,7 +330,7 @@
   /* Chrome label, so Inter (§3) */
   .sub {
     font-family: var(--font-sans);
-    font-size: var(--font-size-2xs);
+    font-size: var(--label-size);
     font-weight: 500;
     letter-spacing: var(--tracking-eyebrow);
     text-transform: uppercase;
@@ -371,7 +371,7 @@
     justify-content: space-between;
     margin-top: var(--space-8);
     font-family: var(--font-mono);
-    font-size: var(--font-size-2xs);
+    font-size: var(--label-size);
     font-variant-numeric: tabular-nums;
     color: var(--tx-4);
   }
