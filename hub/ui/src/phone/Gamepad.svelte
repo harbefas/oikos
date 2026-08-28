@@ -247,9 +247,9 @@
   </div>
 
   <div class="faces">
-    <span></span><button use:bindButton={'y'}>Y</button><span></span>
-    <button use:bindButton={'x'}>X</button><span class="face-guide">{guide}</span><button use:bindButton={'b'}>B</button>
-    <span></span><button use:bindButton={'a'}>A</button><span></span>
+    <span></span><button class="y" use:bindButton={'y'}>Y</button><span></span>
+    <button class="x" use:bindButton={'x'}>X</button><span class="face-guide">{guide}</span><button class="b" use:bindButton={'b'}>B</button>
+    <span></span><button class="a" use:bindButton={'a'}>A</button><span></span>
   </div>
 
   <div class="stick" use:stick={1}><i></i><button class="stick-label" use:bindButton={'l3'}>LS</button></div>
@@ -469,53 +469,39 @@
     font-size: 4.6vh;
   }
 
-  .faces button:nth-child(1) {
-    background: var(--surface);
-    color: var(--tx);
-  }
-
-  .faces button:nth-child(2) {
+  .faces button.y {
     background: #d7a72f;
     color: #1f1600;
   }
 
-  .faces button:nth-child(3) {
+  .faces button.x {
     background: #3478d4;
     color: #fff;
   }
 
-  .faces button:nth-child(4) {
+  .faces button.b {
     background: #c94747;
     color: #fff;
   }
 
-  .faces button:nth-child(5) {
+  .faces button.a {
     background: #2f8f54;
     color: #fff;
   }
 
-  .gamepad.playstation .faces button:nth-child(2) { background: #2f8f54; color: #fff; }
-  .gamepad.playstation .faces button:nth-child(3) { background: #3f67d4; color: #fff; }
-  .gamepad.playstation .faces button:nth-child(4) { background: #d64949; color: #fff; }
-  .gamepad.playstation .faces button:nth-child(5) { background: #d98a2b; color: #1b1000; }
+  .gamepad.playstation .faces button.y { background: #2f8f54; color: #fff; }
+  .gamepad.playstation .faces button.x { background: #3f67d4; color: #fff; }
+  .gamepad.playstation .faces button.b { background: #d64949; color: #fff; }
+  .gamepad.playstation .faces button.a { background: #d98a2b; color: #1b1000; }
 
-  .gamepad.nintendo .faces button:nth-child(2),
-  .gamepad.retro .faces button:nth-child(2) { background: #6d6f77; color: #fff; }
-  .gamepad.nintendo .faces button:nth-child(3),
-  .gamepad.retro .faces button:nth-child(3) { background: #3b76d7; color: #fff; }
-  .gamepad.nintendo .faces button:nth-child(4),
-  .gamepad.retro .faces button:nth-child(4) { background: #d04444; color: #fff; }
-  .gamepad.nintendo .faces button:nth-child(5),
-  .gamepad.retro .faces button:nth-child(5) { background: #2f8f54; color: #fff; }
-
-  .dpad button:nth-child(1),
-  .faces button:nth-child(2) { grid-column: 2; grid-row: 1; }
-  .dpad button:nth-child(2),
-  .faces button:nth-child(3) { grid-column: 1; grid-row: 2; }
-  .dpad button:nth-child(3),
-  .faces button:nth-child(4) { grid-column: 3; grid-row: 2; }
-  .dpad button:nth-child(4),
-  .faces button:nth-child(5) { grid-column: 2; grid-row: 3; }
+  .gamepad.nintendo .faces button.y,
+  .gamepad.retro .faces button.y { background: #6d6f77; color: #fff; }
+  .gamepad.nintendo .faces button.x,
+  .gamepad.retro .faces button.x { background: #3b76d7; color: #fff; }
+  .gamepad.nintendo .faces button.b,
+  .gamepad.retro .faces button.b { background: #d04444; color: #fff; }
+  .gamepad.nintendo .faces button.a,
+  .gamepad.retro .faces button.a { background: #2f8f54; color: #fff; }
 
   @media (max-height: 430px) {
     .faces {
