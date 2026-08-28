@@ -222,42 +222,40 @@
 </script>
 
 <section class="gamepad" class:swapped class:retro={profile === 'retro'} class:playstation={profile === 'playstation'} class:nintendo={profile === 'nintendo'}>
-  <div class="top">
-    <button use:bindButton={'l'}>L1</button>
-    <button use:bindButton={'z'}>L2</button>
-    <button use:bindButton={'select'}>Select</button>
-    <button class:on={turbo} onclick={() => (turbo = !turbo)}>Turbo</button>
-    <button use:bindButton={'start'}>Start</button>
-    <button use:bindButton={'r2'}>R2</button>
-    <button use:bindButton={'r'}>R1</button>
+  <div class="triggers left">
+    <button class="trigger" use:bindButton={'z'}>LT</button>
+    <button use:bindButton={'l'}>LB</button>
   </div>
 
-  <div class="body">
-    <div class="cluster">
-      <div class="stick" use:stick={1}><i></i><span>LS</span></div>
-      <button class="stick-press l3" use:bindButton={'l3'}>L3</button>
-      <div class="dpad">
-        <button use:bindButton={'up'}>▲</button>
-        <button use:bindButton={'left'}>◀</button>
-        <button use:bindButton={'right'}>▶</button>
-        <button use:bindButton={'down'}>▼</button>
-      </div>
-    </div>
-
-    <div class="cluster right">
-      <div class="faces">
-        <span class="face-guide">{guide}</span>
-        <button use:bindButton={'y'}>Y</button>
-        <button use:bindButton={'x'}>X</button>
-        <button use:bindButton={'b'}>B</button>
-        <button use:bindButton={'a'}>A</button>
-      </div>
-      <div class="stick small" use:stick={2}><i></i><span>{rightStick}</span></div>
-      <button class="stick-press r3" use:bindButton={'r3'}>R3</button>
-    </div>
+  <div class="triggers right">
+    <button use:bindButton={'r'}>RB</button>
+    <button class="trigger" use:bindButton={'r2'}>RT</button>
   </div>
 
-  <button class="swap" class:on={swapped} onclick={() => (swapped = !swapped)}>⇄</button>
+  <div class="mid">
+    <button class="menu" onclick={() => (window.location.href = '?tab=home')}>☰</button>
+    <button use:bindButton={'select'}>VIEW</button>
+    <span class="player">P{player}</span>
+    <button use:bindButton={'start'}>MENU</button>
+    <button class:on={turbo} onclick={() => { turbo = !turbo; buzz(turbo ? 24 : 10) }}>TURBO</button>
+  </div>
+
+  <div class="dpad">
+    <span></span><button use:bindButton={'up'}>▲</button><span></span>
+    <button use:bindButton={'left'}>◀</button><span></span><button use:bindButton={'right'}>▶</button>
+    <span></span><button use:bindButton={'down'}>▼</button><span></span>
+  </div>
+
+  <div class="faces">
+    <span></span><button use:bindButton={'y'}>Y</button><span></span>
+    <button use:bindButton={'x'}>X</button><span class="face-guide">{guide}</span><button use:bindButton={'b'}>B</button>
+    <span></span><button use:bindButton={'a'}>A</button><span></span>
+  </div>
+
+  <div class="stick" use:stick={1}><i></i><button class="stick-label" use:bindButton={'l3'}>LS</button></div>
+  <div class="stick small" use:stick={2}><i></i><span>{rightStick}</span></div>
+  <button class="stick-label r3" use:bindButton={'r3'}>RS</button>
+  <button class="swap" class:on={swapped} onclick={() => (swapped = !swapped)} title="Trocar D-pad e analógico">⇄</button>
 </section>
 
 <style>
@@ -269,15 +267,29 @@
     overflow: hidden;
   }
 
-  .top {
+  .triggers,
+  .mid {
     position: absolute;
     z-index: 3;
-    left: 3vw;
-    right: 3vw;
     top: 2.2vh;
     display: grid;
-    grid-template-columns: repeat(7, minmax(0, 1fr));
     gap: 1.1vh;
+  }
+
+  .triggers { width: min(33vw, 260px); grid-template-columns: 1fr 1fr; }
+  .triggers.left { left: 3vw; }
+  .triggers.right { right: 3vw; }
+
+  .mid {
+    left: 50%;
+    transform: translateX(-50%);
+    grid-template-columns: auto auto auto auto auto;
+    align-items: center;
+    padding: .8vh 1vh;
+    border: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--bg) 78%, transparent);
+    backdrop-filter: blur(10px);
   }
 
   button {
@@ -297,16 +309,11 @@
     background: var(--accent-muted);
   }
 
-  .body {
-    position: absolute;
-    inset: 0;
-  }
-
-  .cluster {
-    position: absolute;
-    inset: 0;
-    display: contents;
-  }
+  .triggers button { height: clamp(46px, 9vh, 74px); }
+  .triggers .trigger { height: clamp(54px, 11vh, 88px); border-radius: 2.8vh; background: var(--bg-2); }
+  .mid button { width: 12vh; height: 5.6vh; min-height: 0; border-radius: 3vh; font-size: var(--font-size-2xs); }
+  .mid .menu { width: 5.8vh; height: 5.8vh; border-radius: 50%; font-size: 2.8vh; opacity: .78; }
+  .player { padding: 0 1vh; color: var(--tx-3); font-family: var(--font-mono); font-size: var(--font-size-2xs); font-weight: 800; }
 
   .stick {
     position: absolute;
@@ -364,40 +371,31 @@
     pointer-events: none;
   }
 
-  .stick-press {
+  .stick-label {
     position: absolute;
     z-index: 4;
-    width: 13vh;
-    height: 7.2vh;
-    min-width: 74px;
-    min-height: 44px;
-    border-radius: 999px;
-    border-color: var(--border-2);
-    background: var(--accent);
-    color: #fff;
-    font-size: 2.4vh;
-    font-weight: 900;
-    letter-spacing: 0.05em;
-    box-shadow: 0 6px 18px #0005;
+    left: 50%;
+    bottom: .8vh;
+    transform: translateX(-50%);
+    min-height: 0;
+    padding: .6vh 1vh;
+    background: transparent;
+    color: var(--tx-3);
+    font-family: var(--font-mono);
+    font-size: 1.3vh;
+    letter-spacing: .04em;
   }
 
-  .stick-press.l3 {
-    left: calc(3vw + min(46vh, 332px));
-    bottom: 23vh;
-  }
-
-  .gamepad.swapped .stick-press.l3 {
-    left: calc(20vw + min(32vh, 232px));
-    bottom: 58vh;
-  }
-
-  .stick-press.r3 {
+  .stick-label.r3 {
+    left: auto;
     right: calc(28vw + min(29vh, 210px));
     bottom: 57vh;
+    transform: none;
+    width: 7vh;
+    height: 5vh;
   }
 
-  .dpad,
-  .faces {
+  .dpad, .faces {
     position: absolute;
     display: grid;
     gap: 0.8vh;
@@ -409,6 +407,8 @@
     grid-template-columns: repeat(3, 8.5vh);
     grid-template-rows: repeat(3, 8.5vh);
   }
+
+  .dpad span, .faces span { min-width: 0; min-height: 0; }
 
   .gamepad.swapped .dpad {
     left: 3vw;
@@ -454,7 +454,7 @@
     position: absolute;
     z-index: 5;
     left: 50%;
-    bottom: 5vh;
+    bottom: 3vh;
     width: 9vh;
     height: 9vh;
     min-width: 54px;
@@ -528,7 +528,7 @@
       bottom: 45vh;
     }
 
-    .stick-press.r3 {
+    .stick-label.r3 {
       bottom: 54vh;
     }
   }
