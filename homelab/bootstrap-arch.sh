@@ -73,6 +73,13 @@ python "$REPO_DIR/homelab/stack-setup.py" || \
 say "Installing Console Hub + launchers"
 sudo install -m755 "$REPO_DIR"/hub/scripts/* /usr/local/bin/
 sudo install -Dm755 "$REPO_DIR/hub/console-hub.py" /opt/console-hub/console-hub.py
+if [[ -f "$REPO_DIR/hub/ui/dist/index.html" && -f "$REPO_DIR/hub/ui/dist/tv.html" ]]; then
+  sudo mkdir -p /opt/console-hub/dist
+  sudo cp -a "$REPO_DIR/hub/ui/dist/." /opt/console-hub/dist/
+else
+  warn "hub/ui/dist not found; run 'pnpm build' in hub/ui before installing for the Svelte UI."
+  warn "The Python server still has the legacy UI fallback, so the service can run without it."
+fi
 sudo tee /etc/systemd/system/console-hub.service >/dev/null <<EOF
 [Unit]
 Description=Console Hub
@@ -80,6 +87,7 @@ After=graphical.target
 
 [Service]
 User=$USER_NAME
+Environment=OIKOS_UI=svelte
 Environment=OIKOS_JF_KEY_FILE=$REPO_DIR/homelab/jf.key
 Environment=OIKOS_RADARR_KEY_FILE=$REPO_DIR/homelab/config/radarr/config.xml
 Environment=OIKOS_SONARR_KEY_FILE=$REPO_DIR/homelab/config/sonarr/config.xml

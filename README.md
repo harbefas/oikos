@@ -35,12 +35,17 @@ app — it launches emulators, `mpv`, the *arr* apps and the kiosk browser itsel
 those have to be there. The setup below stands the whole thing up; the hub is one
 component of it, installed along the way.
 
+The product UI is the Svelte app in [`hub/ui`](hub/ui). `console-hub.py` serves that
+build by default when `dist/` is present, and falls back to the older embedded UI if
+only the Python file was installed.
+
 ## Repo layout
 
 | Path | What |
 |------|------|
 | [`hub/`](hub/) | **Console Hub** (phone, `/`) and **Home Screen** (TV, `/home`) — both served by `console-hub.py` — + the launcher scripts it shells out to |
 | [`homelab/`](homelab/) | The stack: Arch `bootstrap-arch.sh`, `docker-compose.yml`, and an agent prompt that wires it all |
+| [`docker-compose.homelab.yml`](docker-compose.homelab.yml) | The author's current homelab compose snapshot. Machine-specific, but versioned so production does not drift out of sight. |
 | [`emulators/`](emulators/) | Retro gaming: the virtual-gamepad autoconfig, RetroArch/PCSX2 setup, cover fetcher |
 
 ## Get started
@@ -131,6 +136,8 @@ variables, so you can override them in the systemd unit without editing code:
 | Music | `<media>/music/<album>/` | `MUSIC` | `OIKOS_MUSIC` |
 | mpv IPC socket | `/tmp/mpv.sock` | `MPV_SOCK` | — |
 | Port | `8100` | `PORT` | — |
+| UI mode | `svelte` | `UI_MODE` | `OIKOS_UI=legacy` to force the fallback |
+| Built UI assets | auto-detected `dist/` | `STATIC` | `OIKOS_STATIC` |
 | Jellyfin | `http://localhost:8096` | `JF` | — |
 | Radarr / Sonarr / Lidarr | `http://localhost:{7878,8989,8686}` | `RADARR` / `SONARR` / `LIDARR` | — |
 | Login password | *(none)* | `PASSWORD` | `OIKOS_PASSWORD` |
@@ -210,6 +217,8 @@ After=graphical.target
 
 [Service]
 User=youruser
+Environment=OIKOS_UI=svelte
+Environment=OIKOS_STATIC=/opt/console-hub/dist
 ExecStart=/usr/bin/python3 /opt/console-hub/console-hub.py
 Restart=on-failure
 
@@ -291,6 +300,14 @@ remove-completed), and registers the arrs in Prowlarr. It leaves your choices to
 (indexers — pass names like `stack-setup.py thepiratebay`; Bazarr provider account).
 [`jellyfin-setup.sh`](homelab/jellyfin-setup.sh) does just the Jellyfin part standalone.
 The 1080p cap is enforced by the hub (it requests the HD-1080p profile).
+
+The author's production compose is tracked separately as
+[`docker-compose.homelab.yml`](docker-compose.homelab.yml). That file reflects the
+server currently running at home: bridge networking, host-specific config paths,
+Byparr instead of FlareSolverr, TorrServer, and the included
+[`homelab/docker-compose.livros.yml`](homelab/docker-compose.livros.yml) stack
+for Calibre-Web-Automated, Suwayomi, Kapowarr and Komga. Use it as a production
+snapshot/reference, not as the generic install path.
 
 Prefer a coding agent? [`homelab/agent-config-prompt.md`](homelab/agent-config-prompt.md)
 is a ready prompt: paste it to an agent with shell access and it clones the repo, runs

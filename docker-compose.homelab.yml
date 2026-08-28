@@ -1,0 +1,131 @@
+# Author homelab snapshot. This is the compose file currently used by the
+# running containers on the author's box. It is intentionally machine-specific:
+# fixed host paths, UID/GID values and service choices reflect that server.
+#
+# The portable bootstrap for a new install still starts from
+# homelab/docker-compose.yml.
+#
+# SINGLE-MOUNT /media:/media keeps paths identical between Radarr/Sonarr/Lidarr/
+# Bazarr and the host Transmission instance, so imports can hardlink instead of
+# copying and no remote path mapping is needed.
+#
+# network_mode: bridge keeps 172.17.0.1 reachable for services that call host
+# processes such as Transmission.
+include:
+  - homelab/docker-compose.livros.yml
+
+services:
+  jellyfin:
+    image: jellyfin/jellyfin:latest
+    container_name: jellyfin
+    network_mode: bridge
+    restart: unless-stopped
+    ports: ["8096:8096"]
+    devices: ["/dev/dri:/dev/dri"]
+    group_add: ["987", "983"]
+    volumes:
+      - /srv/jellyfin/config:/config
+      - /srv/jellyfin/cache:/cache
+      - /media:/media
+
+  radarr:
+    image: linuxserver/radarr
+    container_name: radarr
+    network_mode: bridge
+    restart: unless-stopped
+    environment: ["PUID=1000", "PGID=1000", "TZ=America/Sao_Paulo"]
+    ports: ["7878:7878"]
+    volumes:
+      - /home/nfvelten/docker/arr-stack/radarr:/config
+      - /media:/media
+
+  sonarr:
+    image: linuxserver/sonarr
+    container_name: sonarr
+    network_mode: bridge
+    restart: unless-stopped
+    environment: ["PUID=1000", "PGID=1000", "TZ=America/Sao_Paulo"]
+    ports: ["8989:8989"]
+    volumes:
+      - /home/nfvelten/docker/arr-stack/sonarr:/config
+      - /media:/media
+
+  prowlarr:
+    image: linuxserver/prowlarr
+    container_name: prowlarr
+    network_mode: bridge
+    restart: unless-stopped
+    environment: ["PUID=1000", "PGID=1000", "TZ=America/Sao_Paulo"]
+    ports: ["9696:9696"]
+    volumes:
+      - /home/nfvelten/docker/arr-stack/prowlarr:/config
+
+  bazarr:
+    image: lscr.io/linuxserver/bazarr:latest
+    container_name: bazarr
+    network_mode: bridge
+    restart: unless-stopped
+    environment: ["PUID=1000", "PGID=1000", "TZ=America/Sao_Paulo"]
+    ports: ["6767:6767"]
+    volumes:
+      - /home/nfvelten/docker/bazarr:/config
+      - /media:/media
+
+  lidarr:
+    image: lscr.io/linuxserver/lidarr:latest
+    container_name: lidarr
+    network_mode: bridge
+    restart: unless-stopped
+    environment: ["PUID=1000", "PGID=1000", "TZ=America/Sao_Paulo"]
+    ports: ["8686:8686"]
+    volumes:
+      - /home/nfvelten/docker/lidarr:/config
+      - /media:/media
+
+  navidrome:
+    image: deluan/navidrome:latest
+    container_name: navidrome
+    network_mode: bridge
+    restart: unless-stopped
+    ports: ["4533:4533"]
+    volumes:
+      - /home/nfvelten/docker/navidrome:/data
+      - /media/musica:/music
+
+  jellyseerr:
+    image: fallenbagel/jellyseerr
+    container_name: jellyseerr
+    network_mode: bridge
+    restart: unless-stopped
+    environment: ["TZ=America/Sao_Paulo"]
+    ports: ["5055:5055"]
+    volumes:
+      - /home/nfvelten/docker/arr-stack/jellyseerr:/app/config
+
+  # byparr replaces flaresolverr on this box: same API shape on :8191, but it
+  # currently handles Turnstile better for the configured indexers.
+  byparr:
+    image: ghcr.io/thephaseless/byparr:latest
+    container_name: byparr
+    network_mode: bridge
+    restart: unless-stopped
+    environment: ["TZ=America/Sao_Paulo"]
+    ports: ["8191:8191"]
+    shm_size: 2gb
+
+  # flaresolverr:
+  #   image: flaresolverr/flaresolverr
+  #   container_name: flaresolverr
+  #   network_mode: bridge
+  #   restart: unless-stopped
+  #   environment: ["TZ=America/Sao_Paulo"]
+  #   ports: ["8191:8191"]
+
+  torrserver:
+    image: ghcr.io/yourok/torrserver:latest
+    container_name: torrserver
+    network_mode: bridge
+    restart: unless-stopped
+    ports: ["8090:8090"]
+    volumes:
+      - /home/nfvelten/docker/torrserver:/opt/ts/config

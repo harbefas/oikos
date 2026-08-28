@@ -56,8 +56,13 @@ Anything added here must still answer §6a's test — *is this saying something 
 pnpm build          # -> dist/
 ```
 
-CI builds on push to `master` and publishes a tarball on a `ui-v*` tag. The
-homelab downloads it; Node never gets installed there.
+The Svelte build is the default UI served by `console-hub.py`. Put the contents of
+`dist/` beside the installed server as `/opt/console-hub/dist`, or point
+`OIKOS_STATIC` at another directory. If no build is present, the Python server falls
+back to its embedded legacy UI.
+
+CI builds on push to `master` and publishes a tarball on a `ui-v*` tag. The homelab
+can download it; Node does not need to be installed there.
 
 ```sh
 git tag ui-v1 && git push --tags

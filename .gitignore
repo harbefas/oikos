@@ -5,6 +5,8 @@ __pycache__/
 # local container runtime state
 homelab/.env
 homelab/config/
+docker-compose*.bak*
+homelab/docker-compose*.bak*
 
 # built UI (CI produces the release tarball)
 hub/ui/dist/

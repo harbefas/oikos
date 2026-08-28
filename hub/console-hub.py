@@ -41,7 +41,12 @@ STATIC = os.environ.get("OIKOS_STATIC") or next(
     (p for p in (os.path.join(os.path.dirname(os.path.abspath(__file__)), "dist"),
                  os.path.join(os.path.dirname(os.path.abspath(__file__)), "ui", "dist"))
      if os.path.isdir(p)), "")
-UI_MODE = os.environ.get("OIKOS_UI", "legacy").strip().lower()
+# Svelte is the product UI. The embedded legacy UI stays as a fallback so an
+# installed padserver keeps working even if only this Python file is updated and
+# the built assets were not copied beside it yet.
+UI_MODE = os.environ.get("OIKOS_UI", "svelte").strip().lower()
+if UI_MODE not in ("svelte", "legacy"):
+    UI_MODE = "svelte"
 STATE = {"cover": None, "mkind": None, "query": ""}   # cover/mkind: /api/play; query: teclado do celular -> busca na TV
 PAD_WS_CLIENTS = 0
 PAD_WS_BY_PLAYER = {1: 0, 2: 0}
@@ -3654,4 +3659,5 @@ for n, pad in PADS.items():
     if pad:
         print(f"gamepad P{n}: {pad.device.path}")
 print(f"console hub:  http://0.0.0.0:{PORT}")
+print(f"ui mode: {UI_MODE}" + (f" ({STATIC})" if STATIC else " (no static build; legacy fallback)"))
 ThreadingHTTPServer(("0.0.0.0", PORT), Handler).serve_forever()

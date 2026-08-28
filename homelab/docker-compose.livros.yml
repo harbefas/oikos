@@ -1,0 +1,91 @@
+# Books, papers, comics and manga stack for the author's homelab.
+#
+# This file is included by ../docker-compose.homelab.yml. It is versioned as a
+# real production snapshot, not as the portable default for new users.
+services:
+  # Books: Calibre-Web-Automated as library/reader plus the downloader
+  # companion. The shared ingest path lets the downloader write files that CWA
+  # imports automatically.
+  cwa:
+    image: crocodilestick/calibre-web-automated:latest
+    container_name: cwa
+    network_mode: bridge
+    restart: unless-stopped
+    environment: ["PUID=1000", "PGID=1000", "TZ=America/Sao_Paulo"]
+    ports: ["8083:8083"]
+    volumes:
+      - /home/nfvelten/docker/cwa/config:/config
+      - /media/livros/ingest:/cwa-book-ingest
+      - /media/livros/biblioteca:/calibre-library
+      - /media/livros/papers:/papers
+
+  cwa-downloader:
+    image: ghcr.io/calibrain/calibre-web-automated-book-downloader:latest
+    container_name: cwa-downloader
+    network_mode: bridge
+    restart: unless-stopped
+    environment:
+      - UID=1000
+      - GID=1000
+      - TZ=America/Sao_Paulo
+      - FLARESOLVERR_URL=http://172.17.0.1:8191/v1
+      - INGEST_DIR=/cwa-book-ingest
+      - USE_BOOK_TITLE=true
+      - BOOK_LANGUAGE=pt,en
+    ports: ["8084:8084"]
+    shm_size: 2gb
+    volumes:
+      - /home/nfvelten/docker/cwa/downloader:/config
+      - /media/livros/ingest:/cwa-book-ingest
+
+  # Suwayomi: manga server. It downloads as CBZ so Komga/OPDS clients can read
+  # chapters from the homelab instead of copying whole series to small devices.
+  suwayomi:
+    image: ghcr.io/suwayomi/suwayomi-server:stable
+    container_name: suwayomi
+    network_mode: bridge
+    restart: unless-stopped
+    environment:
+      - TZ=America/Sao_Paulo
+      - DOWNLOAD_AS_CBZ=true
+      - AUTO_DOWNLOAD_CHAPTERS=false
+    ports: ["4567:4567"]
+    volumes:
+      # Order matters: the specific downloads bind must come before the full
+      # Tachidesk directory bind.
+      - /media/mangas:/home/suwayomi/.local/share/Tachidesk/downloads
+      - /home/nfvelten/docker/suwayomi:/home/suwayomi/.local/share/Tachidesk
+
+  # Kapowarr: arr-style downloader/organizer for western comics. Configure in
+  # the UI: ComicVine API key, root folder /comics and DDL credentials if used.
+  kapowarr:
+    image: mrcas/kapowarr:latest
+    container_name: kapowarr
+    network_mode: bridge
+    restart: unless-stopped
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - TZ=America/Sao_Paulo
+    ports: ["5656:5656"]
+    volumes:
+      - /home/nfvelten/docker/kapowarr:/app/db
+      - /media/downloads/quadrinhos:/app/temp_downloads
+      - /media/quadrinhos:/comics
+
+  # Komga: web/OPDS reader for CBZ/CBR/EPUB/PDF. Manga and comics are mounted
+  # read-only so the reader cannot mutate the source files.
+  komga:
+    image: gotson/komga:latest
+    container_name: komga
+    network_mode: bridge
+    restart: unless-stopped
+    user: "1000:1000"
+    environment:
+      - TZ=America/Sao_Paulo
+      - JAVA_TOOL_OPTIONS=-Xmx768m
+    ports: ["25600:25600"]
+    volumes:
+      - /home/nfvelten/docker/komga:/config
+      - /media/mangas:/data/mangas:ro
+      - /media/quadrinhos:/data/quadrinhos:ro
