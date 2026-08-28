@@ -252,9 +252,10 @@
     <span></span><button class="a" use:bindButton={'a'}>A</button><span></span>
   </div>
 
-  <div class="stick" use:stick={1}><i></i><button class="stick-label" use:bindButton={'l3'}>LS</button></div>
+  <div class="stick" use:stick={1}><i></i><span>LS</span></div>
+  <button class="stick-press l3" use:bindButton={'l3'}>L3</button>
   <div class="stick small" use:stick={2}><i></i><span>{rightStick}</span></div>
-  <button class="stick-label r3" use:bindButton={'r3'}>RS</button>
+  <button class="stick-press r3" use:bindButton={'r3'}>R3</button>
   <button class="swap" class:on={swapped} onclick={() => (swapped = !swapped)} title="Trocar D-pad e analógico">⇄</button>
 </section>
 
@@ -371,28 +372,42 @@
     pointer-events: none;
   }
 
-  .stick-label {
+  .stick span {
     position: absolute;
-    z-index: 4;
     left: 50%;
-    bottom: .8vh;
+    bottom: 14%;
     transform: translateX(-50%);
-    min-height: 0;
-    padding: .6vh 1vh;
-    background: transparent;
-    color: var(--tx-3);
+    color: var(--tx-4);
     font-family: var(--font-mono);
-    font-size: 1.3vh;
-    letter-spacing: .04em;
+    font-size: clamp(10px, 2.2vh, 14px);
+    font-weight: 800;
+    pointer-events: none;
   }
 
-  .stick-label.r3 {
-    left: auto;
+  .stick-press {
+    position: absolute;
+    z-index: 4;
+    width: 13vh;
+    height: 7.2vh;
+    min-width: 74px;
+    min-height: 44px;
+    border-radius: 999px;
+    background: var(--accent);
+    color: #fff;
+    font-size: 2.4vh;
+    font-weight: 900;
+    letter-spacing: .05em;
+    box-shadow: 0 6px 18px #0005;
+  }
+
+  .stick-press.l3 {
+    left: calc(3vw + min(46vh, 332px));
+    bottom: 23vh;
+  }
+
+  .stick-press.r3 {
     right: calc(28vw + min(29vh, 210px));
     bottom: 57vh;
-    transform: none;
-    width: 7vh;
-    height: 5vh;
   }
 
   .dpad, .faces {
@@ -514,7 +529,7 @@
       bottom: 45vh;
     }
 
-    .stick-label.r3 {
+    .stick-press.r3 {
       bottom: 54vh;
     }
   }
