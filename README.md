@@ -37,17 +37,23 @@ component of it, installed along the way.
 
 ## Screens
 
-**Home Screen** on the TV — browsed with the d-pad:
+**Home Screen** on the TV — the whole thing, browsed with the d-pad:
 
-![Home Screen on the TV](docs/media/tv-home.gif)
+![Home Screen on the TV](docs/media/tv-tour.gif)
 
-![Games on the TV Home Screen](docs/media/tv-games.gif)
+Playing an album turns the TV into a record player:
 
-**Console Hub** on the phone — games, watch, and the remote:
+![Music playing on the TV](docs/media/tv-music.gif)
 
-| Games | Watch | Remote |
-|:-----:|:-----:|:------:|
-| <img src="docs/media/phone-games.gif" width="240" alt="Games tab"> | <img src="docs/media/phone-watch.gif" width="240" alt="Watch tab"> | <img src="docs/media/phone-remote.gif" width="240" alt="Remote tab"> |
+**Console Hub** on the phone — tap a game, an album or a movie:
+
+| Games | Music | Watch | Remote |
+|:-----:|:-----:|:-----:|:------:|
+| <img src="docs/media/phone-game.gif" width="200" alt="Opening a game"> | <img src="docs/media/phone-music.gif" width="200" alt="Playing an album"> | <img src="docs/media/phone-watch.gif" width="200" alt="Watch tab"> | <img src="docs/media/phone-remote.gif" width="200" alt="TV remote"> |
+
+Once a game is running, the phone is the gamepad:
+
+![Phone as a gamepad](docs/media/phone-gamepad.gif)
 
 ## Repo layout
 
