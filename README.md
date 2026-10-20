@@ -35,6 +35,20 @@ app — it launches emulators, `mpv`, the *arr* apps and the kiosk browser itsel
 those have to be there. The setup below stands the whole thing up; the hub is one
 component of it, installed along the way.
 
+## Screens
+
+**Home Screen** on the TV — browsed with the d-pad:
+
+![Home Screen on the TV](docs/media/tv-home.gif)
+
+![Games on the TV Home Screen](docs/media/tv-games.gif)
+
+**Console Hub** on the phone — games, watch, and the remote:
+
+| Games | Watch | Remote |
+|:-----:|:-----:|:------:|
+| <img src="docs/media/phone-games.gif" width="240" alt="Games tab"> | <img src="docs/media/phone-watch.gif" width="240" alt="Watch tab"> | <img src="docs/media/phone-remote.gif" width="240" alt="Remote tab"> |
+
 ## Repo layout
 
 | Path | What |
