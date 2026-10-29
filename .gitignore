@@ -12,3 +12,6 @@ homelab/docker-compose*.bak*
 hub/ui/dist/
 hub/ui/node_modules/
 hub/ui/oikos-ui.tar.gz
+
+# machine-local compose additions (auto-loaded next to homelab/docker-compose.yml)
+homelab/docker-compose.override.yml
