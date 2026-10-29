@@ -319,11 +319,11 @@
   .stick {
     position: absolute;
     left: 3vw;
-    bottom: 5vh;
-    width: 44vh;
-    height: 44vh;
-    max-width: 320px;
-    max-height: 320px;
+    bottom: 4vh;
+    width: 50vh;
+    height: 50vh;
+    max-width: 370px;
+    max-height: 370px;
     border-radius: 999px;
     border: 2px solid var(--border-2);
     background: radial-gradient(circle, var(--surface), var(--bg-2));
@@ -401,8 +401,8 @@
   }
 
   .stick-press.l3 {
-    left: calc(3vw + min(46vh, 332px));
-    bottom: 23vh;
+    left: calc(3vw + min(52vh, 386px));
+    bottom: 25vh;
   }
 
   .stick-press.r3 {
@@ -434,9 +434,9 @@
 
   .faces {
     right: 3vw;
-    bottom: 5vh;
-    grid-template-columns: repeat(3, 14.5vh);
-    grid-template-rows: repeat(3, 14.5vh);
+    bottom: 4vh;
+    grid-template-columns: repeat(3, 16vh);
+    grid-template-rows: repeat(3, 16vh);
   }
 
   .face-guide {
@@ -444,8 +444,8 @@
     grid-row: 2;
     align-self: center;
     justify-self: center;
-    width: 9.4vh;
-    height: 9.4vh;
+    width: 10.6vh;
+    height: 10.6vh;
     min-width: 58px;
     min-height: 58px;
     border: 1px solid var(--border-2);
@@ -481,7 +481,7 @@
 
   .faces button {
     border-radius: 999px;
-    font-size: 4.6vh;
+    font-size: 5.2vh;
   }
 
   .faces button.y {
@@ -520,8 +520,8 @@
 
   @media (max-height: 430px) {
     .faces {
-      grid-template-columns: repeat(3, 13vh);
-      grid-template-rows: repeat(3, 13vh);
+      grid-template-columns: repeat(3, 14.5vh);
+      grid-template-rows: repeat(3, 14.5vh);
     }
 
     .dpad,

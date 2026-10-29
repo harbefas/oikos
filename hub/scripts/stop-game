@@ -5,7 +5,7 @@
 # e pelo botao de fechar (/api/stop).
 PROCS="pcsx2-qt retroarch mpv librewolf kodi spotify gameoverlayui"
 PROCS_LONG="spotify-launcher"
-STEAM_GAME_PAT='SteamLaunch AppId=|proton waitforexitandrun|steamapps/common/.+|wineserver|winedevice\.exe|explorer\.exe|plugplay\.exe|rpcss\.exe|services\.exe|steam\.exe|\.exe -steam|fossilize_replay'
+STEAM_GAME_PAT='SteamLaunch AppId=|proton waitforexitandrun|steamapps/common/.+|/media/downloads/.+\.exe|Z:\\media\\downloads\\.+\.exe|wineserver|winedevice\.exe|explorer\.exe|plugplay\.exe|rpcss\.exe|services\.exe|steam\.exe|\.exe -steam|fossilize_replay'
 
 for p in $PROCS; do pkill -x $p 2>/dev/null; done
 for p in $PROCS_LONG; do pkill -f "^(.*\/)?$p( |$)" 2>/dev/null; done

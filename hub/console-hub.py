@@ -17,7 +17,7 @@ MPV_SOCK = "/tmp/mpv.sock"
 # code. Defaults are English; override any of them in the systemd unit or shell.
 MEDIA = os.environ.get("OIKOS_MEDIA", "/media")
 # Wallpaper pack shown on the Home Screen when idle -- same pack/hour-naming convention
-# as github.com/mateCreations/omarchy-dynamic-wallpaper, so the TV follows the same
+# as github.com/harbefas/omarchy-dynamic-wallpaper, so the TV follows the same
 # time-of-day image as the desktop/phone.
 WALLPAPER_DIR = os.environ.get(
     "OIKOS_WALLPAPER",
@@ -51,6 +51,9 @@ STATE = {"cover": None, "mkind": None, "query": ""}   # cover/mkind: /api/play; 
 PAD_WS_CLIENTS = 0
 PAD_WS_BY_PLAYER = {1: 0, 2: 0}
 PAD_IDLE_SECS = 45
+LAST_GAME_KIND = None
+LAST_GAME_AT = 0.0
+GAME_GRACE_SECS = 8
 
 
 def hyprpad_up():
@@ -294,6 +297,7 @@ SYSTEMS = {
     "ps3": {"label": "PS3",  "exts": (".iso",),                              "cmd": "run-ps3"},
 }
 APPS = [
+    {"id": "stremio", "label": "Stremio", "icon": "📺", "cmd": "flatpak run com.stremio.Stremio"},
     {"id": "kodi",     "label": "Kodi",     "icon": "📺", "cmd": "kodi"},
     {"id": "jellyfin",  "label": "Filmes", "icon": "🎬",
      "cmd": "librewolf --kiosk http://localhost:8096"},
@@ -542,7 +546,7 @@ def focused_app():
 
 def current_wallpaper():
     """Imagem do WALLPAPER_DIR (nomeadas por hora, ex. 6.jpg) mais proxima <= hora atual;
-    mesma logica do dynamic-wallpaper (github.com/mateCreations/omarchy-dynamic-wallpaper)."""
+    mesma logica do dynamic-wallpaper (github.com/harbefas/omarchy-dynamic-wallpaper)."""
     if not os.path.isdir(WALLPAPER_DIR):
         return None
     hour = datetime.now().hour
@@ -650,16 +654,34 @@ def running_game():
     for pat, name in (("mpv", "mpv"), ("pcsx2", "pcsx2-qt"), ("retroarch", "retroarch")):
         if subprocess.run(["pgrep", pat], capture_output=True).returncode == 0:
             return name
-    steam_game = r"SteamLaunch AppId=|proton waitforexitandrun|\.exe -steam"
+    steam_game = r"SteamLaunch AppId=|proton waitforexitandrun|\.exe -steam|/media/downloads/.+\.exe|Z:\\media\\downloads\\.+\.exe"
     if subprocess.run(["pgrep", "-f", steam_game], capture_output=True).returncode == 0:
         return "steam"
     # Fallback: usa a janela focada no compositor (Sway/Hyprland).
     # Cobre Steam e qualquer outro launcher sem precisar listar processos por nome.
     # O kiosk da TV (librewolf), Steam client e foco vazio nao contam como jogo.
     app = focused_app()
-    if app and not any(x in app for x in ("librewolf", "steam")):
+    if app and "librewolf" not in app and app != "steam":
         return app
     return None
+
+
+def browser_now_playing():
+    """Midia tocando no kiosk (LibreWolf aparece no MPRIS como firefox): streams, YouTube...
+    O hub roda como root e o barramento de sessao so aceita o dono, entao roda como uid 1000."""
+    env = {"PATH": os.environ.get("PATH", "/usr/bin"), "XDG_RUNTIME_DIR": "/run/user/1000",
+           "DBUS_SESSION_BUS_ADDRESS": "unix:path=/run/user/1000/bus"}
+    try:
+        out = subprocess.run(["playerctl", "-p", "firefox", "metadata", "--format",
+                              "{{status}}\t{{title}}\t{{position}}\t{{mpris:length}}"],
+                             capture_output=True, text=True, timeout=2, user=1000, group=1000, env=env).stdout
+    except (OSError, subprocess.SubprocessError):
+        return None
+    parts = out.rstrip("\n").split("\t")
+    if len(parts) != 4 or parts[0] not in ("Playing", "Paused"):
+        return None
+    secs = lambda v: int(v) / 1e6 if v.isdigit() else 0
+    return {"title": parts[1], "pos": secs(parts[2]), "duration": secs(parts[3]), "paused": parts[0] == "Paused"}
 
 
 def list_recent(n=12):
@@ -3439,6 +3461,12 @@ class Handler(BaseHTTPRequestHandler):
         elif path == "/api/status":
             reap_idle_pads()
             g = running_game()
+            global LAST_GAME_KIND, LAST_GAME_AT
+            _now_mono = time.monotonic()
+            if g:
+                LAST_GAME_KIND, LAST_GAME_AT = g, _now_mono
+            elif LAST_GAME_KIND and _now_mono - LAST_GAME_AT < GAME_GRACE_SECS:
+                g = LAST_GAME_KIND
             pads = [n for n, pad in PADS.items() if pad]
             # kind: 'game' (gamepad) | 'media' (controle de video) | 'home' (kiosk da TV, nada rodando)
             if g == "mpv":
@@ -3449,7 +3477,12 @@ class Handler(BaseHTTPRequestHandler):
             elif g:
                 self._json({"running": True, "kind": "game", "current": g, "padws": PAD_WS_CLIENTS, "pads": pads})
             else:
-                self._json({"running": False, "kind": "home", "padws": PAD_WS_CLIENTS, "pads": pads})
+                # kind continua 'home' (o kiosk e a tela inicial); "browser" so informa o que toca nele.
+                resp = {"running": False, "kind": "home", "padws": PAD_WS_CLIENTS, "pads": pads}
+                browser = browser_now_playing()
+                if browser:
+                    resp["browser"] = browser
+                self._json(resp)
         elif path == "/api/idle":
             # usado so pela Home Screen: "idle" = nada em foco alem do proprio kiosk
             # (filme, jogo, Steam, Spotify... qualquer janela por cima conta como "nao idle")

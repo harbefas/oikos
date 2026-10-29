@@ -19,18 +19,23 @@ services:
       - /media/livros/biblioteca:/calibre-library
       - /media/livros/papers:/papers
 
+  # Renamed upstream from calibre-web-automated-book-downloader to shelfmark
+  # in 2026; the old image stopped receiving updates on 2026-07-31.
   cwa-downloader:
-    image: ghcr.io/calibrain/calibre-web-automated-book-downloader:latest
+    image: ghcr.io/calibrain/shelfmark:latest
     container_name: cwa-downloader
     network_mode: bridge
     restart: unless-stopped
     environment:
-      - UID=1000
-      - GID=1000
+      - PUID=1000
+      - PGID=1000
       - TZ=America/Sao_Paulo
-      - FLARESOLVERR_URL=http://172.17.0.1:8191/v1
+      # FLARESOLVERR_URL is gone; the equivalent is USING_EXTERNAL_BYPASSER +
+      # EXT_BYPASSER_URL. The internal bypasser is used instead (recommended,
+      # and what shm_size below is for).
       - INGEST_DIR=/cwa-book-ingest
-      - USE_BOOK_TITLE=true
+      # USE_BOOK_TITLE is gone; naming is now TEMPLATE_RENAME, whose default
+      # is already {Author} - {Title} ({Year}).
       - BOOK_LANGUAGE=pt,en
     ports: ["8084:8084"]
     shm_size: 2gb
