@@ -39,6 +39,26 @@ The product UI is the Svelte app in [`hub/ui`](hub/ui). `console-hub.py` serves 
 build by default when `dist/` is present, and falls back to the older embedded UI if
 only the Python file was installed.
 
+## Screens
+
+**Home Screen** on the TV — the whole thing, browsed with the d-pad:
+
+![Home Screen on the TV](docs/media/tv-tour.gif)
+
+Playing an album turns the TV into a record player:
+
+![Music playing on the TV](docs/media/tv-music.gif)
+
+**Console Hub** on the phone — tap a game, an album or a movie:
+
+| Games | Music | Watch | Remote |
+|:-----:|:-----:|:-----:|:------:|
+| <img src="docs/media/phone-game.gif" width="200" alt="Opening a game"> | <img src="docs/media/phone-music.gif" width="200" alt="Playing an album"> | <img src="docs/media/phone-watch.gif" width="200" alt="Watch tab"> | <img src="docs/media/phone-remote.gif" width="200" alt="TV remote"> |
+
+Once a game is running, the phone is the gamepad:
+
+![Phone as a gamepad](docs/media/phone-gamepad.gif)
+
 ## Repo layout
 
 | Path | What |
@@ -372,4 +392,4 @@ Treat it accordingly.
 
 ## License
 
-MIT. See [LICENSE](LICENSE).
+AGPL-3.0. See [LICENSE](LICENSE).
