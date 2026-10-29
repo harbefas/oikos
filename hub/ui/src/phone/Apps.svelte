@@ -8,6 +8,12 @@
   let busy = $state(false)
   let msg = $state('')
 
+  // Servicos do homelab (~/.config/oikos/services.json): abrem no navegador do
+  // celular, nao na TV, pelo mesmo host usado pra abrir o hub (LAN ou Tailscale).
+  let services = $state([])
+  const host = `${location.protocol}//${location.hostname}`
+  api.services().then((s) => (services = s))
+
   async function launch(id) {
     await api.launchApp(id)
     onlaunch()
@@ -51,6 +57,19 @@
     </button>
   {/each}
 </div>
+
+{#if services.length}
+  <h3>Serviços</h3>
+  <div class="apps">
+    {#each services as svc (svc.port)}
+      <a class="app-tile" href="{host}:{svc.port}/" target="_blank" rel="noopener">
+        <span class="dot" class:up={svc.up} title={svc.up ? 'no ar' : 'fora do ar'}></span>
+        <span class="icon">{svc.icon}</span>
+        <span>{svc.label}</span>
+      </a>
+    {/each}
+  </div>
+{/if}
 
 <style>
   .add {
@@ -116,6 +135,28 @@
     border: 1px solid var(--border);
     border-radius: var(--radius-md);
     color: var(--tx);
+    font-size: var(--font-size-xs);
+    text-decoration: none;
+    position: relative;
+  }
+
+  .dot {
+    position: absolute;
+    top: var(--space-8);
+    right: var(--space-8);
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--red);
+  }
+
+  .dot.up {
+    background: var(--green);
+  }
+
+  h3 {
+    margin: var(--space-16) 0 var(--space-8);
+    color: var(--tx-3);
     font-size: var(--font-size-xs);
   }
 

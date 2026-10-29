@@ -146,6 +146,7 @@ variables, so you can override them in the systemd unit without editing code:
 | Steam library | `<OIKOS_HOME>/.local/share/Steam` | `STEAM_ROOT` | `OIKOS_STEAM` |
 | hyprpad instance | *(none)* | `HYPRPAD` | `OIKOS_HYPRPAD` (+ `OIKOS_HYPRPAD_TOKEN`) |
 | Extra web app shortcuts | `<OIKOS_HOME>/.config/oikos/web-apps.json` | — | `OIKOS_WEB_APPS`, `OIKOS_WEB_APPS_FILE` |
+| Service links (phone browser) | `<OIKOS_HOME>/.config/oikos/services.json` | — | `OIKOS_SERVICES_FILE` |
 
 Extra web shortcuts can be added from the phone's Apps tab. They are saved to
 `<OIKOS_HOME>/.config/oikos/web-apps.json` and launch LibreWolf on the TV.
@@ -155,6 +156,15 @@ You can also seed them from `OIKOS_WEB_APPS`, a JSON array:
 OIKOS_WEB_APPS='[
   {"id":"cazetv","label":"CazeTV","icon":"▶️","url":"https://www.youtube.com/@CazeTV","kiosk":true}
 ]'
+```
+
+Service links open the stack's own web UIs (Radarr, Komga, ...) in the phone's
+browser instead of on the TV. List them in `services.json`; the phone builds each
+URL from the host it used to reach the hub, so the same list works on the LAN and
+over Tailscale. Each tile shows a green/red dot from a port probe on the hub:
+
+```json
+[{"label":"Radarr","icon":"🎞️","port":7878},{"label":"Komga","icon":"📖","port":25600}]
 ```
 
 ### PC tab (optional, hyprpad)

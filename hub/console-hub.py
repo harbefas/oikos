@@ -410,6 +410,38 @@ def add_web_app(item):
     _write_web_apps_file(saved)
     return app
 
+
+# Servicos do homelab (aba Apps do celular): abrem no navegador do celular, nao na TV.
+# [{"label": "Kapowarr", "icon": "🦸", "port": 5656}, ...] -- o celular monta a URL
+# com o host que usou pra abrir o hub (LAN ou Tailscale); "up" = porta aceita conexao.
+SERVICES_FILE = os.environ.get("OIKOS_SERVICES_FILE") or os.path.join(
+    os.environ.get("OIKOS_HOME", os.path.expanduser("~")), ".config/oikos/services.json")
+
+
+def _port_up(port):
+    try:
+        with socket.create_connection(("127.0.0.1", port), timeout=0.5):
+            return True
+    except OSError:
+        return False
+
+
+def list_services():
+    try:
+        with open(SERVICES_FILE, encoding="utf-8") as f:
+            items = json.load(f)
+    except FileNotFoundError:
+        return []
+    except Exception as ex:
+        print(f"[warn] could not read {SERVICES_FILE}: {ex}")
+        return []
+    out = []
+    for it in items if isinstance(items, list) else []:
+        if isinstance(it, dict) and it.get("label") and isinstance(it.get("port"), int):
+            out.append({"label": str(it["label"])[:40], "icon": str(it.get("icon", "🔗"))[:4],
+                        "port": it["port"], "up": _port_up(it["port"])})
+    return out
+
 # --- gamepads (identicos ao padserver de 2 jogadores) ---
 BUTTONS = {
     "a": e.BTN_SOUTH, "b": e.BTN_EAST, "x": e.BTN_NORTH, "y": e.BTN_WEST,
@@ -3318,6 +3350,8 @@ class Handler(BaseHTTPRequestHandler):
             self._json({"url": HYPRPAD, "up": hyprpad_up()})
         elif path == "/api/apps":
             self._json(list_apps())
+        elif path == "/api/services":
+            self._json(list_services())
         elif path == "/api/recent":
             self._json(list_recent())
         elif path == "/api/resume":
